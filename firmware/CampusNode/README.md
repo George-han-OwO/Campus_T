@@ -1,25 +1,36 @@
-# ESP32-S3 节点烧录
+# ESP32-S3 直接上传固件
 
-本目录的 Arduino 固件适配 SCD41 + SHT31 + SPI MicroSD。完整接线、电源和服务器说明见项目根目录 `README.md`。
+本目录使用 SCD41，可选接入 SHT31；不需要 MicroSD 模块或 SPI 接线。每 60 秒采样一次，联网、校时和握手成功后立即通过 HTTPS 上传当前读数。
 
-1. 安装 Arduino IDE 的 ESP32-S3 开发板支持。
-2. 从 Arduino Library Manager 安装 `Sensirion I2C SCD4x`、`Adafruit SHT31`。
-3. 在 `CampusNode` 草图目录中，把 `secrets.example.h` 复制为 `secrets.h`，填入两组 Wi-Fi、HTTPS API URL 和设备 Bearer 密钥。`API_URL` 必须是 `https://map.georgehan0514.top/api/readings`；`DEVICE_API_TOKEN` 必须与正在运行的服务器一致，不能保留 `PASTE_DEVICE_API_TOKEN_HERE`。这个文件必须与 `CampusNode.ino`、`trust_anchor.h` 放在同一目录。真实 Wi-Fi 密码和设备密钥不要提交或放入部署压缩包。
-4. 确认 `SdRecordQueue.h`、`trust_anchor.h` 和 `secrets.h` 与 `CampusNode.ino` 在同一文件夹；选择 `ESP32S3 Dev Module`（或与实际 N16R8 板卡对应的配置），上传 `CampusNode.ino`。
-5. 串口监视器选 115200。新版启动时应显示 `Firmware: 2026.10.15-device-handshake`。等待 SCD41 启动、SD 挂载、Wi-Fi 和 NTP 校时。
+## 烧录
 
-本版握手携带 `DEVICE_ID`、`LOCATION_ID`、固件版本、运行时间及 SD/传感器/校时状态。每台设备使用唯一编号，网站按该编号显示独立握手卡片。SD 故障时仍可成功握手并报告 SD 不可用；数据上传继续受 SD 就绪条件保护。网站以最近成功握手 5 分钟内为在线，测量上传另行显示。需要先更新服务器再烧录；旧服务器返回 204 并不代表已支持设备状态持久化。
+1. Arduino IDE 安装 ESP32-S3 开发板支持，以及 `Sensirion I2C SCD4x`、`Adafruit SHT31` 库。
+2. 保留现有 `secrets.h`。首次使用时将 `secrets.example.h` 复制为 `secrets.h`，填写 Wi-Fi、`https://map.georgehan0514.top/api/readings` 和服务器设备密钥。
+3. 将 `CampusNode.ino`、`RamRecordQueue.h`、`trust_anchor.h`、`secrets.h` 放在同一个 `CampusNode` 文件夹。选择实际 ESP32-S3 板卡和端口，编译、上传。
+4. 串口监视器设为 115200，启动版本应为 `2026.10.15-direct-upload`。
 
-启动时先尝试第一组 Wi-Fi，每次最多等待 12 秒，失败 5 次后切到第二组；第二组也失败 5 次后会回到第一组继续轮询。Wi-Fi 连接后请求 NTP 校时，未成功时每 60 秒重试一次；校时成功后，先向网站发送带设备密钥的 HTTPS 握手。确认成功后才上传 SD 队列，以后每 120 秒重新握手。网络中途断开后重新连接，也会先握手再补传。握手失败时仍继续采样并写入 SD。请先部署含 `/api/device/handshake` 的服务器版本，再烧录此固件。
+保持原传感器接线：SDA=GPIO5，SCL=GPIO4，GND 共地；供电沿用模块支持的原接法。断电后可拆掉 SD 模块。本版不读取、删除或补传旧卡文件；需要旧数据时保留卡并单独取回。
 
-串口正常顺序为 `NTP time sync requested` → `System time synchronized` → `Website handshake confirmed` → `Uploaded and acknowledged ... record(s)`。如果持续只有第一条，说明虽然连上了 Wi-Fi，但设备还没取得可信时间；检查该网络能否访问 NTP（UDP 123）、是否需要网页认证，也可用获准使用的其他 2.4 GHz 网络排查。若校时成功而握手显示 `connection refused`，先确认 `secrets.h` 的 `API_URL` 已改成正式域名；若返回 HTTP 404，先更新服务器；HTTP 401 则核对设备密钥。`SHT31 nan` 只表示可选的 SHT31 没有读数；未接该模块时 SCD41 的温湿度仍可使用。
+## 上传行为
 
-`trust_anchor.h` 内含 ISRG Root X1 与 GTS Root R4 两个公开根证书。后者是当前 Cloudflare 边缘证书链使用的根；如 Cloudflare 后续更换签发 CA，需要重新确认信任根。
+- 每次采样后立即安排上传，不等凑够 10/20/30 条；单条也会发送。实际延迟受校时、握手、网络和 HTTPS 请求耗时影响。
+- 服务器确认后才移除对应待发记录。上传失败时最多暂存最近 30 条在 RAM；重试保留原采集时刻与 record_id，服务器可安全去重。
+- 有积压时每批最多 20 条，确认后约 1 秒继续发送剩余记录，不刻意保留最新 10 条。
+- 队列已满再采样时，丢弃最旧未确认记录以保留新读数。复位、断电、重新烧录会清空 RAM 待发数据；服务器已确认的数据不受影响。
+- 开机先尝试第一组 Wi-Fi 5 次，再尝试第二组，持续轮询。联网后进行 NTP 校时，成功后身份握手，每 120 秒重新握手。
+- 握手上报设备身份、版本、运行时间和传感器/校时状态，不再上报 SD。设备编号、历史点位 M1 与 M104 显示关联保持不变。
 
-每 60 秒采样并写入 SD 后立即安排上传；服务器确认一批后，有积压则约 1 秒后继续补传，不再每批额外等待 30 秒。实际到达网站的时间仍取决于 Wi-Fi、校时、握手和请求耗时。串口会打印每次采集的 UTC 时间和设备运行时间；离线重启尚未校时时明确打印采集时间未知。重试和补传保留原来的采集时刻，不会改成上传时刻。
+正常日志：
 
-新队列在 `/atlas-queue/` 中按编号分段，每段最多 64 MiB，兼容 FAT32；用持久化游标记录服务器已确认的位置，避免补传大队列时反复复制剩余文件。旧版 `/queue.ndjson` 自动迁移，原数据与记录 ID 保留。
+```text
+Firmware: 2026.10.15-direct-upload
+Direct HTTPS upload enabled; RAM retry queue capacity 30; no SD required.
+System time synchronized.
+Website handshake confirmed.
+Direct upload scheduled; RAM pending 1/30.
+Uploaded and acknowledged 1 record(s); 0 pending in RAM.
+```
 
-队列达到 **10 GB（10,000,000,000 字节）**时，按最旧优先删除至少约 **5.5 GB（5,500,000,000 字节）**。以完整分段清理，最多多清理不到 64 MiB；可能删除尚未上传的旧记录。清理目标持久化，中断后会继续；只清理由本程序管理的编号分段，卡上其他文件和网站数据库不受影响。SD 用作待上传缓存，已确认上传的分段平时也会释放，因此正常联网时不会持续累积到 10 GB。
+启动未校时时的首次采样可能早于校时日志，采集时间为 null，不能事后伪造。若持续等待 NTP，检查校园网校时访问；HTTP 401 核对服务器设备密钥。密钥不贴到聊天、仓库或发布包。
 
-如果 SHT31 没有识别，固件继续使用 SCD41 自带温湿度值。SHT31 默认探测 0x44，也尝试 0x45。MicroSD 以 1 MHz SPI 启动，开机最多尝试 3 次，此后若仍未挂载，每 30 秒重试。若持续失败，断电后检查 SD VCC 是否稳定接 5V、GND 是否与 ESP32 共地，CS/MOSI/MISO/SCK 是否分别接 GPIO 10/11/13/12，以及杜邦线和卡座接触。未挂载期间串口会明确提示读数未保存；SD 恢复后，卡上原有队列会继续补传。
+`trust_anchor.h` 保留 TLS 根证书校验。SHT31 未连接或读数无效时使用 SCD41 自带温湿度，不影响直接上传。

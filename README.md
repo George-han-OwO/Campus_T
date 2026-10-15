@@ -4,7 +4,9 @@
 
 **当前部署入口：**用户已在 Windows 主机启动 MSA-SC Tunnel。请优先阅读 [DEPLOY_WINDOWS_TUNNEL.md](./DEPLOY_WINDOWS_TUNNEL.md)，使用单独的 `docker-compose.windows-tunnel.yml`；Cloudflare 服务地址为 `http://127.0.0.1:3000`。下文默认 Compose 的 `http://atlas:3000` 仅适用于连接器和网站都运行在同一 Docker 网络的方式。
 
-这是校园环境监测的第一版可部署原型：ESP32-S3 采集 SCD41 的 CO₂ 与温湿度、SHT31 的温湿度；MicroSD 暂存未上传记录；网络恢复后通过 HTTPS 分批补传。公开网页每 15 秒刷新一次，未接入设备时不显示虚构读数。
+这是校园环境监测的第一版可部署原型：ESP32-S3 采集 SCD41 的 CO₂ 与温湿度、SHT31 的温湿度；最多 30 条待读数暂存在设备 RAM，网络恢复后通过 HTTPS 上传。公开网页每 15 秒刷新一次，未接入设备时不显示虚构读数。
+
+**当前固件 `2026.10.15-direct-upload`：无需 SD 卡，每次采样后立即安排上传。** RAM 只暂存尚未确认的记录，不扣留最新 10 条。由旧版本升级需要重新烧录 ESP32；只更新网站不会改变设备上传逻辑。
 
 ## 下载更新包
 
@@ -19,7 +21,7 @@
 
 ### M104 与三维地图
 
-点位地图使用提供的 `public/models/mac-campus-ff01.glb`，识别模型中 93 个带房间编号的区域。当前设备的实际安装教室为 **M104**；现有 `DEVICE_ID` 和 `LOCATION_ID=M1` 保持不变，页面通过 `src/locations.ts` 把 M1 显示、关联到 M104，既有数据库和 SD 队列无需迁移，也无需为地图重新烧录。
+点位地图使用提供的 `public/models/mac-campus-ff01.glb`，识别模型中 93 个带房间编号的区域。当前设备的实际安装教室为 **M104**；现有 `DEVICE_ID` 和 `LOCATION_ID=M1` 保持不变，页面通过 `src/locations.ts` 把 M1 显示、关联到 M104，既有数据库无需迁移，也无需为地图重新烧录。
 
 进入“点位地图”后可拖动旋转、滚轮缩放、右键平移，搜索房间编号、切换全图/俯视或聚焦房间。M104 使用选中蓝色，其余模型采用黑白材质。设备握手状态显示在对应房间详情，点击“查看环境数据”返回原点位。没有确认位置的户外样方不添加推测标记。模型不是经过本系统测绘校准的地理坐标底图。
 
@@ -31,23 +33,23 @@ Three.js 与模型仅在打开地图页面时加载；模型约 5.9 MB。浏览�
 - `server/index.js`：公开历史读取 API 与设备密钥保护的上传 API
 - SQLite：随应用启动建表，数据库保存到 Docker 持久卷
 - `Dockerfile`、`docker-compose.yml`：网站容器和 Cloudflare Tunnel 连接器
-- `firmware/CampusNode/CampusNode.ino`：ESP32-S3 + SCD41 + SHT31 + MicroSD 固件
+- `firmware/CampusNode/CampusNode.ino`：ESP32-S3 + SCD41 + 可选 SHT31 固件，使用 RAM 暂存待读数据
 - `DEPLOY_WITH_CODEX.md`：可直接交给服务器上 Codex 执行的部署任务
 
 ## 数据流
 
-1. ESP32 每 60 秒读取一次 SCD41 与 SHT31，把采集时刻（UTC，精确到秒）和读数一起写入 SD 卡 `/atlas-queue/` 的分段队列，每段最多 64 MiB。
-2. 每次保存后立即尝试通过 HTTPS 上传，每批最多 10 条；服务器确认后持久化读取游标，整段读完才释放文件，不必反复复制大文件。还有积压时，每批确认后等待约 1 秒继续补传；上传请求本身的耗时取决于网络。
-3. 连接失败时，使用 5 秒起步、逐步延长到最多 15 分钟的重试间隔。相同记录 ID 可安全重传。队列达到 10 GB 时，删除最旧约 5.5 GB 的分段；该容量规则也可能删除尚未上传的旧记录。
+1. ESP32 每 60 秒读取一次 SCD41 与 SHT31，把采集时刻（UTC，精确到秒）和读数暂存在设备 RAM，最多保留最近 30 条。
+2. 每次采集后立即安排 HTTPS 上传，不等待凑满批次，也不保留最新 10 条阻止发送；服务器确认后从 RAM 待发队列移除。失败记录暂存最多 30 条，恢复后每批最多 20 条，批次间约 1 秒继续补传；队列满时丢弃最旧未确认读数，以容纳新读数。
+3. 连接失败时，使用 5 秒起步、逐步延长到最多 15 分钟的重试间隔；新采样或联网握手成功会重新安排上传。相同记录 ID 可安全重传。**复位、断电或重新烧录会清空 RAM 中尚未确认的记录**；服务器已确认的数据仍保存在数据库。
 4. 网页从服务器公开读取最新数据和历史聚合值，每 15 秒刷新。上传 API 需要 `Authorization: Bearer <DEVICE_API_TOKEN>`。
 
-设备在开机连上 Wi-Fi 并完成校时后，先向 `/api/device/handshake` 发送带设备密钥的 HTTPS 请求。未校时成功时每 60 秒重新请求一次 NTP，期间记录留在 SD 卡。收到服务器的 204 确认后才开始上传 SD 队列；此后每 120 秒再握手一次。握手失败或 Wi-Fi 断开时仍继续采样并保存到 SD，恢复确认后补传。服务器与固件需要同时更新：旧服务器没有握手接口，新固件收到 404 时会保留记录并暂停上传。
+设备在开机连上 Wi-Fi 并完成校时后，先向 `/api/device/handshake` 发送带设备密钥的 HTTPS 请求。未校时成功时每 60 秒重新请求一次 NTP；采样暂存在 RAM。收到服务器的 204 确认后即可上传可发送记录，此后每 120 秒再握手一次。握手失败或 Wi-Fi 断开时仍继续采样并暂存在 RAM，恢复确认后再发；断电或复位会丢失未确认的数据。
 
 ### 每台设备的握手状态
 
-概览中的“设备握手状态”按 `device_id` 单独列出设备，显示最近成功握手、最近收到数据、SD 卡、传感器、校时和固件版本；时间使用北京时间，精确到秒。侧栏自动列出已识别设备，可点击切换到对应点位。
+概览中的“设备握手状态”按 `device_id` 单独列出设备，显示最近成功握手、最近收到数据、传感器、校时和固件版本；时间使用北京时间，精确到秒。侧栏自动列出已识别设备，可点击切换到对应点位。
 
-固件 `2026.10.15-device-handshake` 在握手正文中带上设备身份及当前状态。每台物理设备设置不同的 `DEVICE_ID`，重启时沿用原编号。服务器将最近成功握手持久化；每 120 秒握手一次，超过 5 分钟未收到成功握手，页面标注“握手已超时”。近期上传单独按最近 150 秒是否收到测量记录判断；SD 故障不会阻止握手，但当前存储策略仍暂停读数上传。页面每 15 秒刷新状态；接口不可用时显示状态未知，不能据此断定设备离线。
+固件 `2026.10.15-direct-upload` 在握手正文中带上设备身份及当前状态。每台物理设备设置不同的 `DEVICE_ID`，重启时沿用原编号。服务器将最近成功握手持久化；每 120 秒握手一次，超过 5 分钟未收到成功握手，页面标注“握手已超时”。近期上传单独按最近 150 秒是否收到测量记录判断。页面每 15 秒刷新状态；接口不可用时显示状态未知，不能据此断定设备离线。
 
 旧固件的空正文 `{}` 仍可获得 204，但无法归属设备，不更新任何设备握手时间。只上传过历史读数的设备显示“尚无设备握手记录”。请同时更新服务器并重新烧录新固件；旧服务器即使返回 204 也不会记录设备身份。服务器无法知道尚未到达它的 Wi-Fi、NTP 或 TLS 失败，首次身份握手前不会凭空创建节点；超过时限也只说明近期没有收到确认。
 
@@ -57,7 +59,7 @@ Three.js 与模型仅在打开地图页面时加载；模型约 5.9 MB。浏览�
 
 仓库包含网站与 ESP32 固件；仅更新三维地图、界面或动画时，只需更新网站。若设备尚未烧录支持身份握手的版本，再单独更新固件。服务器保留现有 `.env`、数据库和 Docker 卷；使用现有 Windows Tunnel，不重建连接器。已经以 Docker 运行的网站，在原部署目录更新源码后运行 `docker compose -f docker-compose.windows-tunnel.yml config --quiet`，再运行 `docker compose -f docker-compose.windows-tunnel.yml up -d --build`。如果原来以 Node 运行，则沿用现有进程管理方式，安装锁定依赖、执行 `npm run build` 后重启该项目。
 
-ESP32 在原草图目录更新 `CampusNode.ino`，并新增同包的 `SdRecordQueue.h`，保留自己已配置的 `secrets.h`。用原板卡和端口重新烧录；串口出现 `Firmware: 2026.10.15-device-handshake` 才表示新固件已生效。采样仍为每 60 秒一次，保存后即安排上传；网站每 15 秒读取更新。档案页只有真正收到新记录时才播放时间层入场动画，并保留正在浏览的历史选择。
+ESP32 在原草图目录更新 `CampusNode.ino` 和 `RamRecordQueue.h`，保留自己已配置的 `secrets.h`。用原板卡和端口重新烧录；串口出现 `Firmware: 2026.10.15-direct-upload` 才表示新固件已生效。采样仍为每 60 秒一次，每次采样后即安排上传；网站每 15 秒读取更新。档案页只有真正收到新记录时才播放时间层入场动画，并保留正在浏览的历史选择。
 
 服务器没有公网 IP 时使用 Cloudflare Tunnel：服务器只需能向外连接 Cloudflare，通常不需要路由器转发或开放公网入站端口。先确认已有主域名区域 `georgehan0514.top` 在 Cloudflare 中为 Active，再为 `map.georgehan0514.top` 添加 Public Hostname。**当前 Tunnel 在 Windows 主机运行，源站服务填写 `http://127.0.0.1:3000`。**Cloudflare 会用隧道 CNAME 代理该子域名，不需要把 A 记录指向服务器 IP。服务器出站防火墙需允许 Tunnel 连接使用的 TCP/UDP 7844。
 
@@ -86,38 +88,23 @@ I2C 共用一条总线，SCD41 与 SHT31 并联连接。你当前的 SDA/SCL 接
 | 模块引脚 | ESP32-S3／电源 | 说明 |
 | --- | --- | --- |
 | SCD41 VIN | ESP32-S3 3V3 | 模块标注 VIN 3–5V；此处使用 3.3V |
-| SCD41 GND | GND | 与 ESP32 和 SD 供电共地 |
+| SCD41 GND | GND | 与 ESP32 共地 |
 | SCD41 SCL | GPIO 4 | 你已经选定 |
 | SCD41 SDA | GPIO 5 | 你已经选定 |
 | SCD41 3Vo | 不连接 | 模块上的稳压输出脚，不用作输入 |
 | SHT31 VIN/VCC | ESP32-S3 3V3 | 如果你的板子引脚标成 VIN，则先确认模块标注支持 3.3V |
 | SHT31 GND/SCL/SDA | GND / GPIO 4 / GPIO 5 | 与 SCD41 并联；SHT31 常见地址为 0x44，固件也尝试 0x45 |
-| MicroSD VCC | 同一个 USB 5V 电源的 +5V 分支 | 你展示的模块要求 4.5–5.5V；不要接 3V3 |
-| MicroSD GND | 同一电源 GND | 必须与 ESP32 GND 相连 |
-| MicroSD CS | GPIO 10 | 固件显式配置的 ESP32-S3 SPI 引脚 |
-| MicroSD MOSI | GPIO 11 | 同上 |
-| MicroSD MISO | GPIO 13 | 同上 |
-| MicroSD SCK | GPIO 12 | 同上 |
-
-ESP32 通过 USB-C 正常供电；SD 模块从同一个 5V USB 电源分出 5V 和 GND，两个设备共地。不要并接两个不同的 5V 电源。如果你的开发板没有引出 GPIO 10–13，换用空闲 GPIO，并同步修改固件顶部的 SPI 引脚常量。
+SHT31 是可选模块；未连接时使用 SCD41 自带温湿度。此固件不需要 MicroSD 或 SPI 接线。
 
 ## 烧录固件
 
 1. Arduino IDE 安装 ESP32 Arduino core、`Sensirion I2C SCD4x` 和 `Adafruit SHT31` 库。
-2. 将 `firmware/CampusNode/secrets.example.h` 复制为同一目录下的 `firmware/CampusNode/secrets.h`。
+2. 已有 `firmware/CampusNode/secrets.h` 时保留它；仅首次使用时将 `secrets.example.h` 复制为 `secrets.h`。确认新版 `RamRecordQueue.h`、`trust_anchor.h` 与 `.ino` 同目录。
 3. 在本机 `firmware/CampusNode/secrets.h` 填入两组 2.4 GHz Wi-Fi、部署后的 HTTPS 地址，以及服务器 `.env` 中的 `DEVICE_API_TOKEN`。固件先尝试第一组 5 次，再尝试第二组 5 次；两组都失败时持续轮询。真实密码和设备密钥不要上传到仓库或放进网站前端。
 4. 在 Arduino IDE 打开 `firmware/CampusNode/CampusNode.ino`，选择你的 ESP32-S3 开发板并烧录。串口监视器设为 115200。
-5. 首次启动看串口输出：SCD41/SHT31 被发现、SD 卡挂载成功、Wi-Fi 和时间同步成功后，就会开始缓存和上传。
+5. 首次启动看串口输出：`Direct HTTPS upload enabled` → `System time synchronized` → `Website handshake confirmed` → `Uploaded and acknowledged ... record(s)`。采集后立即安排发送，不依赖 SD 卡。
 
-使用 16 GB 卡足够存储很长时间的 1 分钟记录。队列到达 10 GB 前，上传失败保留原记录；到达容量上限会按下方规则清理最旧数据。若 SD 未挂载，固件每 30 秒重试；期间读数没有保存，上传暂停，串口会明确提示。卡上已有记录不会因挂载失败而主动删除。
-
-### SD 容量清理与旧队列迁移
-
-容量按本程序队列文件的实际字节数统计，10 GB = 10,000,000,000 字节，5.5 GB = 5,500,000,000 字节。达到上限时，从最旧文件开始释放至少约 5.5 GB，清理后通常剩约 4.5 GB。以完整分段删除，因此可能多清理不到一个 64 MiB 分段；不删除卡上其他文件，也不影响网站已经收妥的数据。清理目标写入 SD，若中途断电，重新挂载后会继续完成原目标。
-
-这是待上传队列，上传确认后会释放已处理文件，不是永久历史档案。只有严重断网积压时才可能达到 10 GB。容量上限是兜底规则，触发时尚未上传的旧数据也可能被清掉；串口会报告清理情况。
-
-旧版 `/queue.ndjson` 会自动重命名迁移到新队列的最旧分段，保留原记录 ID 和采集时刻。使用 Arduino IDE 时，新增的 `SdRecordQueue.h` 必须与 `CampusNode.ino` 放在同一目录。
+RAM 仅用于最多 30 条尚未确认的数据，不保留已确认的读数。断电、复位或重新烧录会清空待发记录。旧 SD 卡中的文件不会被本固件读取、删除或自动补传，卡可保留用于单独取回旧数据。断电后可以拆下整个 SD 模块；传感器的供电、GND、SDA=GPIO5、SCL=GPIO4 保持原接法。
 
 ### 弱网与时间
 
@@ -139,7 +126,7 @@ ESP32 通过 USB-C 正常供电；SD 模块从同一个 5V USB 电源分出 5V �
 握手正文示例（布尔值应为 JSON 布尔类型）：
 
 ```json
-{"device_id":"esp32s3-m1","location_id":"M1","firmware_version":"2026.10.15-device-handshake","uptime_ms":12000,"sd_ready":false,"scd_ready":true,"sht_ready":false,"clock_ready":true}
+{"device_id":"esp32s3-m1","location_id":"M1","firmware_version":"2026.10.15-direct-upload","uptime_ms":12000,"scd_ready":true,"sht_ready":false,"clock_ready":true}
 ```
 
 `device_id`、`location_id` 必填，其他状态字段可省略；省略的字段显示未知。握手时间取服务器接收时间，设备不能自行回填；未通过设备密钥验证的请求不改变已登记设备状态。`GET /api/devices` 返回的 `serverTime` 与 `handshakeTimeoutMs` 用于前端按服务器时钟判断超时，不依赖访问者电脑的时区或时间设置。硬件状态是最后一次成功握手时的快照。

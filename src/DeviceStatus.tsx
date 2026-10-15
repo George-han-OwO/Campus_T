@@ -98,6 +98,9 @@ function HandshakeRefresh({ loading, refresh }: Pick<Status, "loading" | "refres
 }
 
 function HandshakeCard({ device, unavailable }: { device: Status["devices"][number]; unavailable: boolean }) {
+  const usesRamRetention = device.firmware_version?.includes("ram-retention") ?? false;
+  const usesDirectUpload = device.firmware_version?.includes("direct-upload") ?? false;
+  const usesRam = usesRamRetention || usesDirectUpload;
   const previousHandshake = useRef(device.last_handshake_at);
   const [confirmation, setConfirmation] = useState(0);
   useEffect(() => {
@@ -111,7 +114,7 @@ function HandshakeCard({ device, unavailable }: { device: Status["devices"][numb
       <dl className="handshake-details">
         <div><dt>最近成功握手</dt><dd><span key={device.last_handshake_at} className={confirmation > 0 ? "handshake-confirmed-time" : undefined}>{timestamp(device.last_handshake_at)}</span><small>北京时间 UTC+8</small></dd></div>
         <div><dt>最近收到数据</dt><dd>{timestamp(device.last_upload_at)}<small>{unavailable ? "当前上传状态未知" : device.uploadFresh ? "近期收到数据" : "暂无近期上传"} · 累计 {device.record_count} 条</small></dd></div>
-        <div><dt>SD 卡</dt><dd className={device.sd_ready === false ? "is-warning" : ""}>{device.sd_ready === null ? "未上报" : device.sd_ready ? "已就绪" : "不可用 · 存储与上传暂停"}<small>最近成功握手时的状态</small></dd></div>
+        <div><dt>{usesDirectUpload ? "传输方式" : usesRam ? "本地缓存" : "SD 卡"}</dt><dd className={!usesRam && device.sd_ready === false ? "is-warning" : ""}>{usesDirectUpload ? "Wi-Fi / HTTPS · 采集后直接上传" : usesRamRetention ? "ESP32-S3 RAM · 最多 30 条" : device.sd_ready === null ? "未上报" : device.sd_ready ? "已就绪" : "不可用 · 存储与上传暂停"}<small>{usesDirectUpload ? "失败暂存最多 30 条；确认后移除；重启清空" : usesRamRetention ? "上传确认后保留最新 10 条；重启会清空" : "最近成功握手时的状态"}</small></dd></div>
         <div><dt>传感器 / 校时</dt><dd>SCD41 {device.scd_ready === null ? "未知" : device.scd_ready ? "就绪" : "未就绪"} · {device.clock_ready === null ? "校时未知" : device.clock_ready ? "已校时" : "未校时"}<small>SHT31 {device.sht_ready === null ? "未知" : device.sht_ready ? "就绪" : "未接入或不可用"}</small></dd></div>
         <div><dt>固件版本</dt><dd>{device.firmware_version ?? "未上报"}</dd></div>
       </dl>
@@ -127,6 +130,6 @@ export default function DeviceStatus({ status }: { status: Status }) {
     {status.unavailable ? <p role="status" className="device-status-warning">{status.loading && !status.failed ? "正在读取设备状态…" : "握手状态接口暂不可用；保留上次记录，当前状态未知。"}</p> : null}
     {status.devices.map(device => <HandshakeCard key={device.device_id} device={device} unavailable={status.unavailable} />)}
     {!status.unavailable && !status.devices.length ? <p className="device-status-note">尚未收到设备身份握手或测量记录。首次握手成功后，设备会自动出现在这里。</p> : null}
-    <p className="device-status-note">握手成功表示设备可访问服务器；SD 故障时仍可握手，测量上传状态单独判断。</p>
+    <p className="device-status-note">握手成功表示设备可访问服务器；测量上传状态单独判断。</p>
   </section>;
 }

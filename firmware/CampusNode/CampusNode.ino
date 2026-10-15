@@ -1,8 +1,6 @@
 #include <Adafruit_SHT31.h>
 #include <HTTPClient.h>
-#include <SD.h>
 #include <SensirionI2cScd4x.h>
-#include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Wire.h>
@@ -11,36 +9,25 @@
 
 #include "secrets.h"
 #include "trust_anchor.h"
-#include "SdRecordQueue.h"
+#include "RamRecordQueue.h"
 
 // Existing wiring from the first bench test.
 static constexpr int I2C_SDA_PIN = 5;
 static constexpr int I2C_SCL_PIN = 4;
 
-// ESP32-S3's default SD-SPI pins, explicitly mapped so the board defaults do
-// not affect this wiring. Change these only if the selected board cannot expose them.
-static constexpr int SD_CS_PIN = 10;
-static constexpr int SD_MOSI_PIN = 11;
-static constexpr int SD_MISO_PIN = 13;
-static constexpr int SD_SCK_PIN = 12;
-
 static constexpr uint32_t SAMPLE_INTERVAL_MS = 60UL * 1000UL;
 static constexpr uint32_t HANDSHAKE_INTERVAL_MS = 120UL * 1000UL;
 static constexpr uint32_t TIME_SYNC_RETRY_MS = 60UL * 1000UL;
-static constexpr uint32_t SD_RETRY_INTERVAL_MS = 30UL * 1000UL;
 static constexpr uint32_t FIRST_SAMPLE_DELAY_MS = 7000UL;
 static constexpr uint32_t MAX_RETRY_MS = 15UL * 60UL * 1000UL;
 static constexpr uint32_t MIN_RETRY_MS = 5000UL;
 static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 12000UL;
 static constexpr uint32_t WIFI_RETRY_DELAY_MS = 2000UL;
 static constexpr uint8_t WIFI_RETRIES_PER_NETWORK = 5;
-static constexpr uint8_t UPLOAD_BATCH_SIZE = 10;
-static const char *FIRMWARE_VERSION = "2026.10.15-device-handshake";
+static constexpr uint8_t RAM_QUEUE_CAPACITY = 30;
+static constexpr uint8_t UPLOAD_BATCH_SIZE = 20;
+static const char *FIRMWARE_VERSION = "2026.10.15-direct-upload";
 static constexpr uint32_t BACKLOG_UPLOAD_DELAY_MS = 1000UL;
-// Decimal GB, matching the advertised capacity on SD cards. Use 64-bit values.
-static constexpr uint64_t SD_QUEUE_LIMIT_BYTES = 10000000000ULL;
-static constexpr uint64_t SD_QUEUE_RECLAIM_BYTES = 5500000000ULL;
-static constexpr uint32_t SD_QUEUE_SEGMENT_BYTES = 64UL * 1024UL * 1024UL;
 
 struct WifiCredential {
   const char *ssid;
@@ -53,10 +40,6 @@ const WifiCredential WIFI_NETWORKS[] = {
 };
 static constexpr uint8_t WIFI_NETWORK_COUNT = sizeof(WIFI_NETWORKS) / sizeof(WIFI_NETWORKS[0]);
 
-static const char *QUEUE_FILE = "/queue.ndjson";
-static const char *QUEUE_TEMP_FILE = "/queue.tmp";
-static const char *QUEUE_BACKUP_FILE = "/queue.bak";
-
 #ifndef DEVICE_ID
 #define DEVICE_ID "esp32s3-m1"
 #endif
@@ -67,16 +50,14 @@ static const char *QUEUE_BACKUP_FILE = "/queue.bak";
 
 SensirionI2cScd4x scd41;
 Adafruit_SHT31 sht31 = Adafruit_SHT31();
-SdRecordQueue sdQueue(SD, SD_QUEUE_LIMIT_BYTES, SD_QUEUE_RECLAIM_BYTES, SD_QUEUE_SEGMENT_BYTES);
+RamRecordQueue<String, RAM_QUEUE_CAPACITY> ramQueue;
 bool scdReady = false;
 bool shtReady = false;
-bool sdReady = false;
 bool clockReady = false;
 bool handshakeConfirmed = false;
 uint32_t nextSampleAt = 0;
 uint32_t nextHandshakeAt = 0;
 uint32_t nextTimeSyncAttemptAt = 0;
-uint32_t nextSdRetryAt = 0;
 uint32_t nextWifiAttemptAt = 0;
 uint32_t wifiConnectDeadline = 0;
 uint32_t nextUploadAt = 0;
@@ -117,37 +98,10 @@ bool beginScd41() {
   return true;
 }
 
-void recoverQueueFiles() {
-  if (!SD.exists(QUEUE_FILE) && SD.exists(QUEUE_BACKUP_FILE)) {
-    SD.rename(QUEUE_BACKUP_FILE, QUEUE_FILE);
+void appendQueueRecord(const String &record) {
+  if (ramQueue.push(record)) {
+    Serial.println("RAM queue full; discarded the oldest unacknowledged reading to retain the latest 30.");
   }
-  if (SD.exists(QUEUE_FILE) && SD.exists(QUEUE_BACKUP_FILE)) {
-    SD.remove(QUEUE_BACKUP_FILE);
-  }
-  if (SD.exists(QUEUE_FILE) && SD.exists(QUEUE_TEMP_FILE)) {
-    SD.remove(QUEUE_TEMP_FILE);
-  }
-}
-
-bool mountSd() {
-  SD.end();
-  // Short jumper wires are still susceptible to contact and signal noise.
-  // Records are small; a conservative SPI clock improves wiring tolerance.
-  sdReady = SD.begin(SD_CS_PIN, SPI, 1000000);
-  if (!sdReady) return false;
-  recoverQueueFiles();
-  sdReady = sdQueue.begin();
-  if (!sdReady) return false;
-  Serial.printf("MicroSD ready: %llu bytes total.\n", static_cast<unsigned long long>(SD.totalBytes()));
-  nextUploadAt = millis();
-  return true;
-}
-
-bool appendQueueRecord(const String &record) {
-  if (!sdReady) return false;
-  const bool saved = sdQueue.append(record);
-  if (!sdQueue.healthy()) sdReady = false;
-  return saved;
 }
 
 String captureIsoTime() {
@@ -188,18 +142,8 @@ String makeRecordJson(uint16_t co2, float scdTemperature, float scdHumidity,
   return json;
 }
 
-bool readPendingBatch(String rows[], uint8_t &count) {
-  count = 0;
-  if (!sdReady) return false;
-  const bool loaded = sdQueue.readBatch(rows, UPLOAD_BATCH_SIZE, count);
-  if (!sdQueue.healthy()) sdReady = false;
-  return loaded;
-}
-
-bool removeAcknowledgedRecords(uint8_t acknowledgedCount) {
-  const bool saved = sdQueue.acknowledge(acknowledgedCount);
-  if (!sdQueue.healthy()) sdReady = false;
-  return saved;
+uint8_t pendingUploadCount() {
+  return min(static_cast<uint8_t>(ramQueue.size()), UPLOAD_BATCH_SIZE);
 }
 
 bool serverAccepted(const String &body, uint8_t expectedCount) {
@@ -237,7 +181,6 @@ bool confirmServerHandshake() {
   String body = "{\"device_id\":\"" DEVICE_ID "\",\"location_id\":\"" LOCATION_ID "\"";
   body += ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\"";
   body += ",\"uptime_ms\":" + String(millis());
-  body += String(",\"sd_ready\":") + (sdReady ? "true" : "false");
   body += String(",\"scd_ready\":") + (scdReady ? "true" : "false");
   body += String(",\"sht_ready\":") + (shtReady ? "true" : "false");
   body += String(",\"clock_ready\":") + (clockReady ? "true" : "false") + "}";
@@ -257,10 +200,11 @@ bool confirmServerHandshake() {
 }
 
 bool postPendingBatch() {
-  if (!sdReady || WiFi.status() != WL_CONNECTED || !clockReady || !handshakeConfirmed) return false;
+  if (WiFi.status() != WL_CONNECTED || !clockReady || !handshakeConfirmed) return false;
   String rows[UPLOAD_BATCH_SIZE];
-  uint8_t count = 0;
-  if (!readPendingBatch(rows, count)) return sdReady;
+  const uint8_t count = pendingUploadCount();
+  if (!count) return true;
+  for (uint8_t i = 0; i < count; ++i) rows[i] = ramQueue.at(i);
 
   String body = "{\"readings\":[";
   for (uint8_t i = 0; i < count; i++) {
@@ -276,7 +220,7 @@ bool postPendingBatch() {
   http.setTimeout(15000);
   http.setReuse(true);
   if (!http.begin(secureClient, API_URL)) {
-    Serial.println("HTTPS client could not start; keeping SD queue.");
+    Serial.println("HTTPS client could not start; keeping RAM queue.");
     http.end();
     return false;
   }
@@ -287,15 +231,12 @@ bool postPendingBatch() {
   http.end();
 
   if (status >= 200 && status < 300 && serverAccepted(responseBody, count)) {
-    if (removeAcknowledgedRecords(count)) {
-      Serial.printf("Uploaded and acknowledged %u record(s).\n", count);
-      return true;
-    }
-    Serial.println("Server acknowledged records, but SD cursor update failed; duplicate-safe retry is enabled.");
-    return false;
+    if (!ramQueue.acknowledge(count)) return false;
+    Serial.printf("Uploaded and acknowledged %u record(s); %u pending in RAM.\n", count, static_cast<unsigned>(ramQueue.size()));
+    return true;
   }
 
-  Serial.printf("Upload not acknowledged (HTTP %d); keeping SD queue.\n", status);
+  Serial.printf("Upload not acknowledged (HTTP %d); keeping RAM queue.\n", status);
   if (status == 401) Serial.println("Check DEVICE_API_TOKEN in server .env and firmware/secrets.h.");
   return false;
 }
@@ -357,7 +298,7 @@ void maintainWifi() {
   if (wifiWasConnected) {
     wifiWasConnected = false;
     handshakeConfirmed = false;
-    Serial.println("Wi-Fi disconnected; cached SD records are retained.");
+    Serial.printf("Wi-Fi disconnected; %u queued reading(s) remain in RAM until reboot.\n", static_cast<unsigned>(ramQueue.size()));
   }
 
   if (wifiAttemptPending) {
@@ -419,7 +360,7 @@ void updateSensorSample() {
     shtTemperature = sht31.readTemperature();
     shtHumidity = sht31.readHumidity();
     if (!isfinite(shtTemperature) || !isfinite(shtHumidity)) {
-      Serial.println("SHT31 read failed; the SCD41 reading will still be saved.");
+      Serial.println("SHT31 read failed; the SCD41 reading will still be queued.");
       shtTemperature = NAN;
       shtHumidity = NAN;
     }
@@ -433,12 +374,9 @@ void updateSensorSample() {
                 capturedAt == "null" ? "clock not synchronized: capture time unknown" : "UTC capture time retained on retry",
                 static_cast<unsigned long>(capturedUptime));
   const String record = makeRecordJson(co2, scdTemperature, scdHumidity, shtTemperature, shtHumidity, capturedAt, capturedUptime);
-  if (appendQueueRecord(record)) {
-    Serial.println("Saved to SD queue.");
-    nextUploadAt = millis();
-  } else if (!sdReady) {
-    Serial.println("Reading was not saved: MicroSD is unavailable.");
-  }
+  appendQueueRecord(record);
+  Serial.printf("Direct upload scheduled; RAM pending %u/%u.\n", static_cast<unsigned>(ramQueue.size()), RAM_QUEUE_CAPACITY);
+  nextUploadAt = millis();
   nextSampleAt = millis() + SAMPLE_INTERVAL_MS;
 }
 
@@ -460,14 +398,7 @@ void setup() {
   shtReady = sht31.begin(0x44) || sht31.begin(0x45);
   Serial.println(shtReady ? "SHT31 detected." : "SHT31 not detected; SCD41 temperature/RH will be used.");
 
-  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-  for (uint8_t attempt = 1; attempt <= 3 && !sdReady; ++attempt) {
-    if (mountSd()) break;
-    Serial.printf("MicroSD mount failed (attempt %u/3).\n", attempt);
-    if (attempt < 3) delay(500);
-  }
-  if (!sdReady) Serial.println("MicroSD unavailable. Sampling continues; storage and upload are paused.");
-  nextSdRetryAt = millis() + SD_RETRY_INTERVAL_MS;
+  Serial.printf("Direct HTTPS upload enabled; RAM retry queue capacity %u; no SD required.\n", RAM_QUEUE_CAPACITY);
 
   beginWifi();
   nextSampleAt = millis() + FIRST_SAMPLE_DELAY_MS;
@@ -477,11 +408,6 @@ void setup() {
 
 void loop() {
   maintainWifi();
-
-  if (!sdReady && static_cast<int32_t>(millis() - nextSdRetryAt) >= 0) {
-    if (!mountSd()) Serial.println("MicroSD still unavailable; retrying in 30 seconds.");
-    nextSdRetryAt = millis() + SD_RETRY_INTERVAL_MS;
-  }
 
   if (WiFi.status() == WL_CONNECTED && clockReady &&
       static_cast<int32_t>(millis() - nextHandshakeAt) >= 0) {
@@ -495,11 +421,10 @@ void loop() {
     updateSensorSample();
   }
 
-  if (handshakeConfirmed && static_cast<int32_t>(millis() - nextUploadAt) >= 0) {
+  if (handshakeConfirmed && ramQueue.size() > 0 && static_cast<int32_t>(millis() - nextUploadAt) >= 0) {
     if (postPendingBatch()) {
       uploadRetryMs = MIN_RETRY_MS;
-      // Drain a backlog continuously; do not add a 30-second wait to every batch.
-      nextUploadAt = millis() + (sdQueue.hasPending() ? BACKLOG_UPLOAD_DELAY_MS : 30000UL);
+      nextUploadAt = millis() + BACKLOG_UPLOAD_DELAY_MS;
     } else {
       nextUploadAt = millis() + uploadRetryMs + (esp_random() % 2000UL);
       uploadRetryMs = min(uploadRetryMs * 2, MAX_RETRY_MS);
