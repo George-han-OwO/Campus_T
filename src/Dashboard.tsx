@@ -1,5 +1,6 @@
 "use client";
 import ArchiveWorkspace from "./ArchiveWorkspace";
+import DeviceStatus, { useDeviceStatus } from "./DeviceStatus";
 import ArchiveBackdrop from "./ArchiveBackdrop";
 import ArchiveDataFlow from "./ArchiveDataFlow";
 import { chartTimeLabel, chartTimeScale } from "./chartTimeScale";
@@ -369,8 +370,10 @@ export default function Dashboard() {
     return () => { window.clearInterval(interval); requestController.current?.abort(); };
   }, [refresh]);
 
+  const deviceStatus = useDeviceStatus();
+  const onlineDevices = deviceStatus.devices.filter(device => device.handshake === "online");
   const latest = payloadLocation === location ? payload?.latest ?? null : null;
-  const isOnline = Boolean(latest && Date.now() - new Date(latest.received_at).getTime() < 150_000);
+  const isOnline = onlineDevices.some(device => device.location_id === location);
   const activeMetric = metricMeta[metric];
   const rangeEnd = useMemo(() => {
     const time = payload ? Date.parse(payload.serverTime) : Date.now();
@@ -387,6 +390,9 @@ export default function Dashboard() {
     { id: "A", label: "样方 A · 北侧草地", kind: "待调查点位" },
     { id: "B", label: "样方 B · 中部花坛", kind: "待调查点位" },
     { id: "C", label: "样方 C · 南侧树荫", kind: "待调查点位" },
+    ...Array.from(new Set(deviceStatus.devices.map(device => device.location_id)))
+      .filter(id => !["M1", "A", "B", "C"].includes(id))
+      .map(id => ({ id, label: `设备点位 · ${id}`, kind: "已识别设备点位" })),
   ];
   const selectedLocation = locationOptions.find((item) => item.id === location) ?? locationOptions[0];
   const periodMeans = useMemo(() => {
@@ -431,11 +437,15 @@ export default function Dashboard() {
 
         <div className="rail-separator" />
         <div className="rail-section-label">本期节点</div>
-        <button className={`node-select ${location === "M1" ? "active" : ""}`} type="button" onClick={() => { setLocation("M1"); setActiveView("overview"); }}>
+        {deviceStatus.devices.length ? deviceStatus.devices.map(device => <button key={device.device_id} className={`node-select ${location === device.location_id ? "active" : ""}`} type="button" onClick={() => { setLocation(device.location_id); setActiveView("overview"); }}>
+          <span className="node-glyph"><AirVent size={15} /></span>
+          <span className="node-name"><strong>{device.device_id}</strong><small>{device.location_id} · {device.handshake === "online" ? "握手在线" : device.handshake === "expired" ? "握手超时" : device.handshake === "unknown" ? "待设备握手" : "状态未知"}</small></span>
+          <span className={`tiny-status ${device.handshake === "online" ? "online" : ""}`} />
+        </button>) : <button className={`node-select ${location === "M1" ? "active" : ""}`} type="button" onClick={() => { setLocation("M1"); setActiveView("overview"); }}>
           <span className="node-glyph"><AirVent size={15} /></span>
           <span className="node-name"><strong>M 区 · 室内</strong><small>ESP32-S3 节点 01</small></span>
           <span className={`tiny-status ${isOnline ? "online" : ""}`} />
-        </button>
+        </button>}
 
         <div className="rail-action-list">
           <a href={`/api/records?location=${encodeURIComponent(location)}&limit=500`} target="_blank" rel="noreferrer" className="rail-action"><Download size={15} /><span>数据导出接口</span></a>
@@ -457,9 +467,9 @@ export default function Dashboard() {
           <div className="breadcrumb"><span>校园环境</span><span className="breadcrumb-slash">/</span><strong>{activeView === "overview" ? "环境概览" : activeView === "database" ? "数据档案" : activeView === "plants" ? "植物样方" : "点位地图"}</strong></div>
           <div className="top-actions">
             <span className="update-hint"><span className="pulse-dot" />每 15 秒更新</span>
-            <button className={`connection-pill ${isOnline ? "connected" : ""}`} type="button" title="点击刷新设备连接状态" onClick={() => void refresh(true)}>
+            <button className={`connection-pill ${isOnline ? "connected" : ""}`} type="button" title="点击刷新当前点位握手状态和数据" onClick={() => { void refresh(true); void deviceStatus.refresh(); }}>
               {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
-              <span>{isOnline ? "在线" : "待连接"}</span>
+              <span>{deviceStatus.unavailable ? "状态未知" : isOnline ? "握手在线" : "未确认握手"}</span>
             </button>
             <button className="icon-button" type="button" aria-label="立即刷新" onClick={() => void refresh(true)}><RefreshCw size={15} className={loading ? "spin" : ""} /></button>
           </div>
@@ -494,9 +504,9 @@ export default function Dashboard() {
           {activeView === "overview" ? <>
           <div className="overview-strip">
             <section className="glass-panel overview-tile online-tile">
-              <span className="overview-label">设备在线数</span>
-              <strong>{isOnline ? "01" : "00"}<small> / 01</small></strong>
-              <span className="overview-caption"><span className={`status-dot ${isOnline ? "online-dot" : ""}`} />{isOnline ? "M1 节点运行中" : "等待节点上报"}</span>
+              <span className="overview-label">握手在线设备</span>
+              <strong>{deviceStatus.unavailable ? "—" : String(onlineDevices.length).padStart(2, "0")}<small> / {String(deviceStatus.devices.length).padStart(2, "0")}</small></strong>
+              <span className="overview-caption"><span className={`status-dot ${isOnline ? "online-dot" : ""}`} />{deviceStatus.unavailable ? "正在获取握手状态" : "按设备独立确认连接"}</span>
             </section>
             <section className="glass-panel overview-tile average-tile">
               <div className="overview-title-line"><span className="overview-label">当前点位时段均值</span><span className="overview-caption">{selectedLocation.id} · 最近 {timeframes.find((frame) => frame.hours === hours)?.label ?? `${hours} 小时`}</span></div>
@@ -537,10 +547,10 @@ export default function Dashboard() {
           </section>
 
           <section className="glass-panel placement-panel">
-            <div className="section-heading compact-heading"><div><div className="section-kicker">DEVICE LOCATION</div><h2>设备安放位置</h2></div><span className={`status-chip ${isOnline ? "is-online" : ""}`}><span className="status-dot" />{isOnline ? "在线" : "离线"}</span></div>
+            <div className="section-heading compact-heading"><div><div className="section-kicker">DEVICE LOCATION</div><h2>设备安放位置</h2></div><span className={`status-chip ${isOnline ? "is-online" : ""}`}><span className="status-dot" />{deviceStatus.unavailable ? "状态未知" : isOnline ? "握手在线" : "未确认握手"}</span></div>
             <div className="placement-content">
               <div className="placement-visual" aria-hidden="true"><div className="placement-room"><span className="placement-window" /><span className="placement-door" /><span className="placement-device"><AirVent size={17} /></span><span className="placement-pulse" /></div></div>
-              <div className="placement-copy"><span className="placement-kicker"><MapPin size={14} />M 区 · 教室 M1</span><strong>室内固定观测点</strong><p>ESP32-S3 节点 01 · CO₂、温度与相对湿度</p><span className="placement-note">点位位置可在设备安装后补充精确说明。</span></div>
+              <div className="placement-copy"><span className="placement-kicker"><MapPin size={14} />{selectedLocation.label}</span><strong>固定观测点</strong><p>CO₂、温度与相对湿度</p><span className="placement-note">点位位置可在设备安装后补充精确说明。</span></div>
             </div>
           </section>
 
@@ -563,20 +573,7 @@ export default function Dashboard() {
               )}
             </section>
 
-            <section className="glass-panel status-panel">
-              <div className="section-heading compact-heading"><div><div className="section-kicker">DEVICE STATUS</div><h2>采集节点</h2></div><span className={`status-chip ${isOnline ? "is-online" : ""}`}><span className="status-dot" />{isOnline ? "运行中" : "待连接"}</span></div>
-              <div className="device-info-card">
-                <div className="device-icon"><AirVent size={18} strokeWidth={1.5} /></div>
-                <div><strong>ESP32-S3 · 节点 01</strong><span>教室 M1 / 室内固定点</span></div>
-                <span className={`device-signal ${isOnline ? "signal-on" : ""}`}><i /><i /><i /></span>
-              </div>
-              <div className="device-details">
-                <div><span>CO₂ 传感器</span><strong>SCD41 <span className="detail-state">{latest ? "已采集" : "待接入"}</span></strong></div>
-                <div><span>温湿度读数来源</span><strong>{latest?.sht_temp_c != null || latest?.sht_humidity_pct != null ? "SHT31" : latest?.scd_temp_c != null || latest?.scd_humidity_pct != null ? "SCD41" : "—"} <span className="detail-state">{latest?.sht_temp_c != null || latest?.sht_humidity_pct != null || latest?.scd_temp_c != null || latest?.scd_humidity_pct != null ? "已采集" : "待接入"}</span></strong></div>
-                <div><span>本地缓存</span><strong>MicroSD <span className="detail-state">{isOnline ? "同步中" : "等待设备"}</span></strong></div>
-              </div>
-              <div className="weak-network-note"><Wifi size={14} /><span>弱网下设备先写入 SD，连接恢复后分批补传。</span></div>
-            </section>
+            <DeviceStatus status={deviceStatus} />
           </div>
           </> : activeView === "database" ? <ArchiveWorkspace detectAnomalies={findAnomalies} locationId={location} hours={hours} fallbackReadings={selectedReadings} onSetHours={setHours} onOpenApi={() => window.open(`/api/records?location=${encodeURIComponent(location)}&limit=500`, "_blank", "noopener,noreferrer")} /> : activeView === "plants" ? <PlantWorkspace /> : <PointMapWorkspace selectedPoint={location} onSelectPoint={setLocation} online={isOnline} onOpenOverview={() => setActiveView("overview")} />}
 
@@ -594,8 +591,8 @@ export default function Dashboard() {
           <section className="device-dialog glass-panel" role="dialog" aria-modal="true" aria-labelledby="device-dialog-title">
             <button className="dialog-close" type="button" onClick={() => setShowDeviceGuide(false)} aria-label="关闭">×</button>
             <div className="section-kicker">ADD A NODE</div><h2 id="device-dialog-title">添加采集设备</h2>
-            <p>当前页面已接入 M1 节点。新增节点需先为 ESP32 配置唯一的设备编号和点位编号，再使用服务器设备密钥上传数据。</p>
-            <div className="dialog-note"><CircleHelp size={15} /><span>设备首次成功上报后，服务器才会收到新点位数据。不要把设备密钥放进网页或公开消息。</span></div>
+            <p>每台 ESP32 使用唯一的 DEVICE_ID，并配置所在点位 LOCATION_ID。新固件首次成功握手后，会自动出现在设备握手列表中。</p>
+            <div className="dialog-note"><CircleHelp size={15} /><span>设备握手与测量上传分别显示。同一设备重启沿用原编号；多台设备不要共用编号。不要把设备密钥放进网页或公开消息。</span></div>
             <button className="dialog-primary" type="button" onClick={() => setShowDeviceGuide(false)}>知道了</button>
           </section>
         </div>

@@ -1,0 +1,16 @@
+.device-status-panel { min-width: 0; }
+.device-status-note { color: #a6a6a6; font-size: 12px; line-height: 1.8; margin: 10px 0 16px; }
+.device-handshake-card { border: 1px solid #ffffff19; border-radius: 5px; padding: 18px; margin-top: 14px; background: #ffffff03; }
+.device-handshake-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.device-handshake-heading > div { min-width: 0; flex: 1; }
+.device-handshake-heading strong { display: block; color: #eee; font-size: 14px; overflow-wrap: anywhere; }
+.device-handshake-heading > div > span { color: #999; display: block; font-size: 11px; margin-top: 5px; }
+.handshake-badge { color: #eee; border: 1px solid #ffffff30; padding: 5px 8px; font-size: 11px; white-space: nowrap; }
+.handshake-details { margin: 18px 0 0; }
+.handshake-details > div { display: grid; grid-template-columns: 95px minmax(0, 1fr); gap: 10px; border-top: 1px solid #ffffff0d; padding: 11px 0; }
+.handshake-details dt { font-size: 11px; color: #999; }
+.handshake-details dd { margin: 0; color: #e2e2e2; font: 12px/1.7 Consolas, "Microsoft YaHei", monospace; overflow-wrap: anywhere; }
+.handshake-details dd small { display: block; color: #939393; font-size: 10px; }
+.device-status-warning, .device-handshake-card .is-warning { color: #ef9b94; }
+.device-status-warning { font-size: 12px; line-height: 1.7; }
+@media (max-width: 670px) { .device-handshake-card { padding: 12px; } .device-handshake-heading { flex-wrap: wrap; } .handshake-details > div { grid-template-columns: 80px minmax(0, 1fr); } }

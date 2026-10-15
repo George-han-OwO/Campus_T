@@ -35,7 +35,7 @@ static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 12000UL;
 static constexpr uint32_t WIFI_RETRY_DELAY_MS = 2000UL;
 static constexpr uint8_t WIFI_RETRIES_PER_NETWORK = 5;
 static constexpr uint8_t UPLOAD_BATCH_SIZE = 10;
-static const char *FIRMWARE_VERSION = "2026.10.15-sd-retention";
+static const char *FIRMWARE_VERSION = "2026.10.15-device-handshake";
 static constexpr uint32_t BACKLOG_UPLOAD_DELAY_MS = 1000UL;
 // Decimal GB, matching the advertised capacity on SD cards. Use 64-bit values.
 static constexpr uint64_t SD_QUEUE_LIMIT_BYTES = 10000000000ULL;
@@ -234,7 +234,14 @@ bool confirmServerHandshake() {
   }
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + DEVICE_API_TOKEN);
-  const int status = http.POST("{}");
+  String body = "{\"device_id\":\"" DEVICE_ID "\",\"location_id\":\"" LOCATION_ID "\"";
+  body += ",\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\"";
+  body += ",\"uptime_ms\":" + String(millis());
+  body += String(",\"sd_ready\":") + (sdReady ? "true" : "false");
+  body += String(",\"scd_ready\":") + (scdReady ? "true" : "false");
+  body += String(",\"sht_ready\":") + (shtReady ? "true" : "false");
+  body += String(",\"clock_ready\":") + (clockReady ? "true" : "false") + "}";
+  const int status = http.POST(body);
   http.end();
   if (status == 204) {
     Serial.println("Website handshake confirmed.");

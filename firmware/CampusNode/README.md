@@ -6,7 +6,9 @@
 2. 从 Arduino Library Manager 安装 `Sensirion I2C SCD4x`、`Adafruit SHT31`。
 3. 在 `CampusNode` 草图目录中，把 `secrets.example.h` 复制为 `secrets.h`，填入两组 Wi-Fi、HTTPS API URL 和设备 Bearer 密钥。`API_URL` 必须是 `https://map.georgehan0514.top/api/readings`；`DEVICE_API_TOKEN` 必须与正在运行的服务器一致，不能保留 `PASTE_DEVICE_API_TOKEN_HERE`。这个文件必须与 `CampusNode.ino`、`trust_anchor.h` 放在同一目录。真实 Wi-Fi 密码和设备密钥不要提交或放入部署压缩包。
 4. 确认 `SdRecordQueue.h`、`trust_anchor.h` 和 `secrets.h` 与 `CampusNode.ino` 在同一文件夹；选择 `ESP32S3 Dev Module`（或与实际 N16R8 板卡对应的配置），上传 `CampusNode.ino`。
-5. 串口监视器选 115200。新版启动时应显示 `Firmware: 2026.10.15-sd-retention`。等待 SCD41 启动、SD 挂载、Wi-Fi 和 NTP 校时。
+5. 串口监视器选 115200。新版启动时应显示 `Firmware: 2026.10.15-device-handshake`。等待 SCD41 启动、SD 挂载、Wi-Fi 和 NTP 校时。
+
+本版握手携带 `DEVICE_ID`、`LOCATION_ID`、固件版本、运行时间及 SD/传感器/校时状态。每台设备使用唯一编号，网站按该编号显示独立握手卡片。SD 故障时仍可成功握手并报告 SD 不可用；数据上传继续受 SD 就绪条件保护。网站以最近成功握手 5 分钟内为在线，测量上传另行显示。需要先更新服务器再烧录；旧服务器返回 204 并不代表已支持设备状态持久化。
 
 启动时先尝试第一组 Wi-Fi，每次最多等待 12 秒，失败 5 次后切到第二组；第二组也失败 5 次后会回到第一组继续轮询。Wi-Fi 连接后请求 NTP 校时，未成功时每 60 秒重试一次；校时成功后，先向网站发送带设备密钥的 HTTPS 握手。确认成功后才上传 SD 队列，以后每 120 秒重新握手。网络中途断开后重新连接，也会先握手再补传。握手失败时仍继续采样并写入 SD。请先部署含 `/api/device/handshake` 的服务器版本，再烧录此固件。
 

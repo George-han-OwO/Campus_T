@@ -36,6 +36,29 @@ database.exec(`
     ON measurements(location_id, captured_at DESC, record_id DESC);
   CREATE INDEX IF NOT EXISTS measurements_device_received_idx
     ON measurements(device_id, received_at DESC);
+  CREATE TABLE IF NOT EXISTS device_status (
+    device_id TEXT PRIMARY KEY NOT NULL,
+    location_id TEXT NOT NULL,
+    last_handshake_at TEXT NOT NULL,
+    firmware_version TEXT,
+    uptime_ms INTEGER,
+    sd_ready INTEGER,
+    scd_ready INTEGER,
+    sht_ready INTEGER,
+    clock_ready INTEGER
+  );
+`);
+
+const handshakeTimeoutMs = 300_000;
+const saveHandshake = database.prepare(`
+  INSERT INTO device_status (device_id, location_id, last_handshake_at, firmware_version,
+    uptime_ms, sd_ready, scd_ready, sht_ready, clock_ready)
+  VALUES (@device_id, @location_id, @last_handshake_at, @firmware_version,
+    @uptime_ms, @sd_ready, @scd_ready, @sht_ready, @clock_ready)
+  ON CONFLICT(device_id) DO UPDATE SET location_id=excluded.location_id,
+    last_handshake_at=excluded.last_handshake_at, firmware_version=excluded.firmware_version,
+    uptime_ms=excluded.uptime_ms, sd_ready=excluded.sd_ready, scd_ready=excluded.scd_ready,
+    sht_ready=excluded.sht_ready, clock_ready=excluded.clock_ready
 `);
 
 const insertReading = database.prepare(`
@@ -147,12 +170,56 @@ app.post("/api/device/handshake", (request, response) => {
       error: deviceToken ? "unauthorized" : "device_token_not_configured",
     });
   }
+  const input = request.body;
+  // Legacy firmware sends {}; keep its connectivity probe working without
+  // attributing that anonymous request to an arbitrary device.
+  const legacy = input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length === 0;
+  if (!legacy && (
+    !input || !validIdentifier(input.device_id) || !validIdentifier(input.location_id, 32) ||
+    (input.firmware_version !== undefined && !validIdentifier(input.firmware_version, 80)) ||
+    (input.uptime_ms !== undefined && (!Number.isSafeInteger(input.uptime_ms) || input.uptime_ms < 0)) ||
+    ["sd_ready", "scd_ready", "sht_ready", "clock_ready"].some(key => input[key] !== undefined && typeof input[key] !== "boolean")
+  )) return sendJson(response, 400, { ok: false, error: "invalid_device_status" });
   try {
     database.prepare("SELECT 1").get();
+    if (!legacy) {
+      const flag = key => typeof input[key] === "boolean" ? Number(input[key]) : null;
+      saveHandshake.run({
+        device_id: input.device_id, location_id: input.location_id,
+        last_handshake_at: new Date().toISOString(), firmware_version: input.firmware_version ?? null,
+        uptime_ms: input.uptime_ms ?? null, sd_ready: flag("sd_ready"),
+        scd_ready: flag("scd_ready"), sht_ready: flag("sht_ready"), clock_ready: flag("clock_ready"),
+      });
+    }
     return response.status(204).end();
   } catch {
     return sendJson(response, 503, { ok: false, error: "database_unavailable" });
   }
+});
+
+app.get("/api/devices", (_request, response) => {
+  const now = Date.now();
+  const devices = database.prepare(`
+    WITH uploads AS (
+      SELECT device_id, MAX(received_at) AS last_upload_at, COUNT(*) AS record_count
+      FROM measurements GROUP BY device_id
+    ), ids AS (
+      SELECT device_id FROM device_status UNION SELECT device_id FROM uploads
+    )
+    SELECT ids.device_id,
+      COALESCE(s.location_id, (SELECT location_id FROM measurements m WHERE m.device_id=ids.device_id ORDER BY received_at DESC LIMIT 1)) AS location_id,
+      s.last_handshake_at, s.firmware_version, s.uptime_ms,
+      s.sd_ready, s.scd_ready, s.sht_ready, s.clock_ready,
+      u.last_upload_at, COALESCE(u.record_count, 0) AS record_count
+    FROM ids LEFT JOIN device_status s ON s.device_id=ids.device_id
+      LEFT JOIN uploads u ON u.device_id=ids.device_id ORDER BY ids.device_id
+  `).all().map(row => ({
+    ...row,
+    handshake_status: !row.last_handshake_at ? "unknown"
+      : now - Date.parse(row.last_handshake_at) < handshakeTimeoutMs ? "online" : "expired",
+    ...Object.fromEntries(["sd_ready", "scd_ready", "sht_ready", "clock_ready"].map(key => [key, row[key] === null ? null : Boolean(row[key])])),
+  }));
+  sendJson(response, 200, { ok: true, devices, serverTime: new Date(now).toISOString(), handshakeTimeoutMs });
 });
 
 app.get("/api/readings", (request, response) => {
