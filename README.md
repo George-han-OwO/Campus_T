@@ -6,6 +6,15 @@
 
 这是校园环境监测的第一版可部署原型：ESP32-S3 采集 SCD41 的 CO₂ 与温湿度、SHT31 的温湿度；MicroSD 暂存未上传记录；网络恢复后通过 HTTPS 分批补传。公开网页每 15 秒刷新一次，未接入设备时不显示虚构读数。
 
+## 下载更新包
+
+- [最新正式发布与更新说明](https://github.com/George-han-OwO/Campus_T/releases/latest)
+- [网站部署包](https://github.com/George-han-OwO/Campus_T/releases/latest/download/campus-atlas-server.zip)：网站、接口、部署配置、说明及固件源码；保留服务器原有 `.env` 和数据库。
+- [ESP32 固件源码包](https://github.com/George-han-OwO/Campus_T/releases/latest/download/campus-node-firmware.zip)：解压后打开 `CampusNode/CampusNode.ino`，保留已有 `secrets.h`，按固件说明编译、烧录；这是源码包，未包含通用烧录二进制。
+- [SHA-256 校验文件](https://github.com/George-han-OwO/Campus_T/releases/latest/download/SHA256SUMS.txt)
+
+发布包只包含对应标签中的源码和示例配置，不含真实密钥、数据库或依赖缓存。首次部署请阅读下方说明。GitHub 自动生成的 Source code 压缩包为仓库快照，面向部署的文件请优先选择上述附件。
+
 ## 包含内容
 
 - `src/`：黑白、液态玻璃风格的响应式仪表盘
