@@ -15,6 +15,16 @@
 
 发布包只包含对应标签中的源码和示例配置，不含真实密钥、数据库或依赖缓存。首次部署请阅读下方说明。GitHub 自动生成的 Source code 压缩包为仓库快照，面向部署的文件请优先选择上述附件。
 
+## 地图与点位
+
+### M104 与三维地图
+
+点位地图使用提供的 `public/models/mac-campus-ff01.glb`，识别模型中 93 个带房间编号的区域。当前设备的实际安装教室为 **M104**；现有 `DEVICE_ID` 和 `LOCATION_ID=M1` 保持不变，页面通过 `src/locations.ts` 把 M1 显示、关联到 M104，既有数据库和 SD 队列无需迁移，也无需为地图重新烧录。
+
+进入“点位地图”后可拖动旋转、滚轮缩放、右键平移，搜索房间编号、切换全图/俯视或聚焦房间。M104 使用选中蓝色，其余模型采用黑白材质。设备握手状态显示在对应房间详情，点击“查看环境数据”返回原点位。没有确认位置的户外样方不添加推测标记。模型不是经过本系统测绘校准的地理坐标底图。
+
+Three.js 与模型仅在打开地图页面时加载；模型约 5.9 MB。浏览器需要支持 WebGL，加载失败时显示重试入口。Docker 构建已包含 `public/`，部署包也必须保留该模型目录，否则地图无法加载。
+
 ## 包含内容
 
 - `src/`：黑白、液态玻璃风格的响应式仪表盘
@@ -45,9 +55,9 @@
 
 ### 已有部署更新（2026-10-15）
 
-本次同时更新网站与 ESP32 固件，两端需要分别应用。服务器保留现有 `.env`、数据库和 Docker 卷；使用现有 Windows Tunnel，不重建连接器。已经以 Docker 运行的网站，在原部署目录更新源码后运行 `docker compose -f docker-compose.windows-tunnel.yml config --quiet`，再运行 `docker compose -f docker-compose.windows-tunnel.yml up -d --build`。如果原来以 Node 运行，则沿用现有进程管理方式，安装锁定依赖、执行 `npm run build` 后重启该项目。
+仓库包含网站与 ESP32 固件；仅更新三维地图、界面或动画时，只需更新网站。若设备尚未烧录支持身份握手的版本，再单独更新固件。服务器保留现有 `.env`、数据库和 Docker 卷；使用现有 Windows Tunnel，不重建连接器。已经以 Docker 运行的网站，在原部署目录更新源码后运行 `docker compose -f docker-compose.windows-tunnel.yml config --quiet`，再运行 `docker compose -f docker-compose.windows-tunnel.yml up -d --build`。如果原来以 Node 运行，则沿用现有进程管理方式，安装锁定依赖、执行 `npm run build` 后重启该项目。
 
-ESP32 在原草图目录更新 `CampusNode.ino`，并新增同包的 `SdRecordQueue.h`，保留自己已配置的 `secrets.h`。用原板卡和端口重新烧录；串口出现 `Firmware: 2026.10.15-sd-retention` 才表示新固件已生效。采样仍为每 60 秒一次，保存后即安排上传；网站每 15 秒读取更新。档案页只有真正收到新记录时才播放时间层入场动画，并保留正在浏览的历史选择。
+ESP32 在原草图目录更新 `CampusNode.ino`，并新增同包的 `SdRecordQueue.h`，保留自己已配置的 `secrets.h`。用原板卡和端口重新烧录；串口出现 `Firmware: 2026.10.15-device-handshake` 才表示新固件已生效。采样仍为每 60 秒一次，保存后即安排上传；网站每 15 秒读取更新。档案页只有真正收到新记录时才播放时间层入场动画，并保留正在浏览的历史选择。
 
 服务器没有公网 IP 时使用 Cloudflare Tunnel：服务器只需能向外连接 Cloudflare，通常不需要路由器转发或开放公网入站端口。先确认已有主域名区域 `georgehan0514.top` 在 Cloudflare 中为 Active，再为 `map.georgehan0514.top` 添加 Public Hostname。**当前 Tunnel 在 Windows 主机运行，源站服务填写 `http://127.0.0.1:3000`。**Cloudflare 会用隧道 CNAME 代理该子域名，不需要把 A 记录指向服务器 IP。服务器出站防火墙需允许 Tunnel 连接使用的 TCP/UDP 7844。
 

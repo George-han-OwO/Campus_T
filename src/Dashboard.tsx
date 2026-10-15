@@ -4,6 +4,7 @@ import DeviceStatus, { useDeviceStatus } from "./DeviceStatus";
 import ArchiveBackdrop from "./ArchiveBackdrop";
 import ArchiveDataFlow from "./ArchiveDataFlow";
 import { chartTimeLabel, chartTimeScale } from "./chartTimeScale";
+import { locationLabel } from "./locations";
 
 import {
   Activity,
@@ -25,7 +26,9 @@ import {
   WifiOff,
   Wind,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const CampusMap = lazy(() => import("./CampusMap"));
 
 type Reading = {
   captured_at: string;
@@ -199,30 +202,6 @@ function PlantWorkspace() {
   );
 }
 
-function PointMapWorkspace({ selectedPoint, onSelectPoint, online, onOpenOverview }: { selectedPoint: string; onSelectPoint: (point: string) => void; online: boolean; onOpenOverview: () => void }) {
-  const points = [
-    { id: "M1", name: "教室 M1", detail: "室内环境节点", x: "27%", y: "33%", status: online ? "在线" : "暂无连接" },
-    { id: "A", name: "候选点 A", detail: "莲花馆外 · 北侧草地", x: "66%", y: "30%", status: "待调查" },
-    { id: "B", name: "候选点 B", detail: "莲花馆外 · 中部花坛", x: "58%", y: "55%", status: "待调查" },
-    { id: "C", name: "候选点 C", detail: "莲花馆外 · 南侧树荫", x: "76%", y: "72%", status: "待调查" },
-  ];
-  const active = points.find((point) => point.id === selectedPoint) ?? points[0];
-  return (
-    <section className="glass-panel map-workspace">
-      <div className="section-heading compact-heading"><div><div className="section-kicker">CAMPUS POINTS</div><h2>点位地图</h2></div><span className="record-badge">示意图 · 可选择点位</span></div>
-      <p className="workspace-intro">地图为点位关系示意，不按真实比例绘制。选择 M1 可查看室内传感器数据；A、B、C 为待调查的绿植样方候选点。</p>
-      <div className="campus-map-layout">
-        <div className="campus-map" role="group" aria-label="选择校园观测点">
-          <div className="map-building building-one"><span>教学区</span></div><div className="map-building building-two"><span>莲花馆</span></div>
-          <div className="map-path path-one" /><div className="map-path path-two" />
-          {points.map((point) => <button key={point.id} type="button" className={`map-marker ${selectedPoint === point.id ? "selected" : ""} ${point.id === "M1" ? "sensor-marker" : "plant-marker"}`} style={{ left: point.x, top: point.y }} onClick={() => onSelectPoint(point.id)} aria-pressed={selectedPoint === point.id}><span className="map-marker-dot">{point.id === "M1" ? <AirVent size={13} /> : point.id}</span><span>{point.name}</span></button>)}
-        </div>
-        <aside className="map-point-card"><div className="section-kicker">SELECTED LOCATION</div><span className={`map-status ${active.id === "M1" && online ? "active" : ""}`}><i />{active.status}</span><h3>{active.name}</h3><p>{active.detail}</p><span className="map-point-id">点位编号 · {active.id}</span>{active.id === "M1" ? <button className="primary-action" type="button" onClick={onOpenOverview}>查看环境数据 <Activity size={14} /></button> : <div className="pending-point-note">该点位尚无传感器或植物调查记录。</div>}</aside>
-      </div>
-    </section>
-  );
-}
-
 function SensorChart({ readings, metric, rangeStart, rangeEnd, loading, failed, height = 390 }: { readings: Reading[]; metric: MetricKey; rangeStart: number; rangeEnd: number; loading: boolean; failed: boolean; height?: number }) {
   const meta = metricMeta[metric];
   const values = readings
@@ -312,7 +291,7 @@ export default function Dashboard() {
   const [hours, setHours] = useState(24);
   const [metric, setMetric] = useState<MetricKey>("co2_ppm");
   const [location, setLocation] = useState("M1");
-  const [activeView, setActiveView] = useState<ViewKey>(() => window.location.hash === "#database" ? "database" : "overview");
+  const [activeView, setActiveView] = useState<ViewKey>(() => window.location.hash === "#map" ? "map" : window.location.hash === "#database" ? "database" : "overview");
   const [showLocationMenu, setShowLocationMenu] = useState(false);
   const [payload, setPayload] = useState<ApiPayload | null>(null);
   const [payloadLocation, setPayloadLocation] = useState("");
@@ -386,7 +365,7 @@ export default function Dashboard() {
   const selectedSampleCount = selectedReadings.reduce((sum, reading) => sum + (reading.sample_count ?? 1), 0);
   const recentReadings = [...selectedReadings].slice(-6).reverse();
   const locationOptions = [
-    { id: "M1", label: "M 区 · 教室 M1", kind: "传感器在线点位" },
+    { id: "M1", label: locationLabel("M1"), kind: "环境传感器点位 · 数据编号 M1" },
     { id: "A", label: "样方 A · 北侧草地", kind: "待调查点位" },
     { id: "B", label: "样方 B · 中部花坛", kind: "待调查点位" },
     { id: "C", label: "样方 C · 南侧树荫", kind: "待调查点位" },
@@ -439,11 +418,11 @@ export default function Dashboard() {
         <div className="rail-section-label">本期节点</div>
         {deviceStatus.devices.length ? deviceStatus.devices.map(device => <button key={device.device_id} className={`node-select ${location === device.location_id ? "active" : ""}`} type="button" onClick={() => { setLocation(device.location_id); setActiveView("overview"); }}>
           <span className="node-glyph"><AirVent size={15} /></span>
-          <span className="node-name"><strong>{device.device_id}</strong><small>{device.location_id} · {device.handshake === "online" ? "握手在线" : device.handshake === "expired" ? "握手超时" : device.handshake === "unknown" ? "待设备握手" : "状态未知"}</small></span>
+          <span className="node-name"><strong>{device.device_id}</strong><small>{locationLabel(device.location_id)} · {device.handshake === "online" ? "握手在线" : device.handshake === "expired" ? "握手超时" : device.handshake === "unknown" ? "待设备握手" : "状态未知"}</small></span>
           <span className={`tiny-status ${device.handshake === "online" ? "online" : ""}`} />
         </button>) : <button className={`node-select ${location === "M1" ? "active" : ""}`} type="button" onClick={() => { setLocation("M1"); setActiveView("overview"); }}>
           <span className="node-glyph"><AirVent size={15} /></span>
-          <span className="node-name"><strong>M 区 · 室内</strong><small>ESP32-S3 节点 01</small></span>
+          <span className="node-name"><strong>M104 教室</strong><small>ESP32-S3 节点 01</small></span>
           <span className={`tiny-status ${isOnline ? "online" : ""}`} />
         </button>}
 
@@ -575,7 +554,7 @@ export default function Dashboard() {
 
             <DeviceStatus status={deviceStatus} />
           </div>
-          </> : activeView === "database" ? <ArchiveWorkspace detectAnomalies={findAnomalies} locationId={location} hours={hours} fallbackReadings={selectedReadings} onSetHours={setHours} onOpenApi={() => window.open(`/api/records?location=${encodeURIComponent(location)}&limit=500`, "_blank", "noopener,noreferrer")} /> : activeView === "plants" ? <PlantWorkspace /> : <PointMapWorkspace selectedPoint={location} onSelectPoint={setLocation} online={isOnline} onOpenOverview={() => setActiveView("overview")} />}
+          </> : activeView === "database" ? <ArchiveWorkspace detectAnomalies={findAnomalies} locationId={location} hours={hours} fallbackReadings={selectedReadings} onSetHours={setHours} onOpenApi={() => window.open(`/api/records?location=${encodeURIComponent(location)}&limit=500`, "_blank", "noopener,noreferrer")} /> : activeView === "plants" ? <PlantWorkspace /> : <Suspense fallback={<section className="glass-panel map-workspace"><p>正在载入三维地图…</p></section>}><CampusMap selectedPoint={location} onSelectPoint={setLocation} devices={deviceStatus.devices} onOpenOverview={() => setActiveView("overview")} /></Suspense>}
 
           <footer className="page-footer">
             <span>校园环境观测 · Cycle 01</span>

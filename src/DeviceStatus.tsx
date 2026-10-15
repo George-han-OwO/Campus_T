@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AirVent, RefreshCw } from "lucide-react";
 import "./device-status.css";
+import { locationLabel } from "./locations";
 
 type Device = {
   device_id: string;
@@ -106,7 +107,7 @@ function HandshakeCard({ device, unavailable }: { device: Status["devices"][numb
   }, [device.last_handshake_at, unavailable]);
   return <article className="device-handshake-card">
       {confirmation > 0 ? <span key={confirmation} className="handshake-confirmation-glow" aria-hidden="true" /> : null}
-      <div className="device-handshake-heading"><AirVent size={20} /><div><strong>{device.device_id}</strong><span>点位 {device.location_id}</span></div><span className={`handshake-badge ${device.handshake === "expired" ? "is-warning" : ""}`}>{stateLabel[device.handshake]}</span></div>
+      <div className="device-handshake-heading"><AirVent size={20} /><div><strong>{device.device_id}</strong><span>{locationLabel(device.location_id)} · 编号 {device.location_id}</span></div><span className={`handshake-badge ${device.handshake === "expired" ? "is-warning" : ""}`}>{stateLabel[device.handshake]}</span></div>
       <dl className="handshake-details">
         <div><dt>最近成功握手</dt><dd><span key={device.last_handshake_at} className={confirmation > 0 ? "handshake-confirmed-time" : undefined}>{timestamp(device.last_handshake_at)}</span><small>北京时间 UTC+8</small></dd></div>
         <div><dt>最近收到数据</dt><dd>{timestamp(device.last_upload_at)}<small>{unavailable ? "当前上传状态未知" : device.uploadFresh ? "近期收到数据" : "暂无近期上传"} · 累计 {device.record_count} 条</small></dd></div>

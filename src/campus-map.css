@@ -1,0 +1,34 @@
+.campus-3d-workspace { padding: clamp(18px, 2.6vw, 36px); }
+.campus-3d-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 25px; margin-top: 24px; }
+.campus-3d-stage { position: relative; min-height: 660px; height: min(76vh, 900px); background: #151515; border: 1px solid #ffffff14; overflow: hidden; }
+.campus-model-host { position: absolute; inset: 0; }
+.campus-model-host canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.campus-model-host canvas:focus-visible { outline: 1px solid #6dcaff; outline-offset: -2px; }
+.campus-model-caption { position: absolute; top: 22px; left: 22px; padding: 12px 14px; border: 1px solid #ffffff12; background: #151515b8; backdrop-filter: blur(12px); pointer-events: none; display: grid; gap: 6px; }
+.campus-model-caption span { font: 9px Consolas, monospace; color: #999; letter-spacing: .15em; }
+.campus-model-caption strong { color: #eee; font: 36px Consolas, monospace; }
+.campus-model-controls { position: absolute; bottom: 18px; left: 18px; right: 18px; display: flex; flex-wrap: wrap; gap: 6px; }
+.campus-model-controls button, .campus-model-overlay button { display: flex; align-items: center; gap: 7px; padding: 9px 12px; color: #ddd; background: #202020db; backdrop-filter: blur(12px); border: 1px solid #ffffff2b; font-size: 11px; cursor: pointer; }
+.campus-model-controls button:hover { color: #fff; background: #333; }
+.campus-model-controls button:disabled { cursor: default; opacity: .4; }
+.campus-model-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; padding: 24px; text-align: center; background: #151515dd; color: #eee; }
+.campus-model-overlay span { color: #999; font-size: 12px; max-width: 350px; line-height: 1.8; }
+.campus-room-panel { min-width: 0; }
+.campus-room-search { display: flex; gap: 8px; align-items: center; color: #999; border: 1px solid #ffffff2b; padding: 10px; margin: 14px 0; }
+.campus-room-search input { min-width: 0; width: 100%; background: transparent; color: #eee; border: none; outline: none; font: 12px Consolas, "Microsoft YaHei", monospace; }
+.campus-room-search:focus-within { border-color: #6dcaff; }
+.campus-room-list { display: grid; gap: 4px; max-height: 225px; overflow: auto; scrollbar-width: thin; scrollbar-color: #555 #191919; }
+.campus-room-list button { display: flex; justify-content: space-between; padding: 8px 10px; background: transparent; border: 1px solid transparent; color: #aaa; font: 12px Consolas, monospace; text-align: left; cursor: pointer; }
+.campus-room-list button[aria-pressed="true"] { color: #6dcaff; border-color: #6dcaff40; background: #6dcaff09; }
+.campus-room-list button:hover { background: #ffffff09; color: #eee; }
+.campus-room-list button span { font: 10px "Microsoft YaHei", sans-serif; }
+.campus-room-list p { color: #999; font-size: 12px; }
+.campus-room-detail { border-top: 1px solid #ffffff20; margin-top: 22px; padding-top: 22px; }
+.campus-room-detail h3 { font: 38px Consolas, monospace; color: #eee; margin: 14px 0; }
+.campus-room-detail > p, .campus-model-note { color: #999; font-size: 12px; line-height: 1.9; }
+.campus-room-device { display: grid; gap: 6px; margin: 15px 0; padding: 12px 0; border-block: 1px solid #ffffff15; font-size: 12px; }
+.campus-room-device strong { color: #eee; overflow-wrap: anywhere; }
+.campus-room-device span { color: #aaa; }
+.campus-room-detail .primary-action { margin-block: 16px; }
+@media (max-width: 1100px) { .campus-3d-layout { grid-template-columns: minmax(0, 1fr) 210px; gap: 18px; } .campus-3d-stage { min-height: 520px; } }
+@media (max-width: 760px) { .campus-3d-layout { grid-template-columns: 1fr; } .campus-3d-stage { min-height: 420px; height: 60vh; } .campus-3d-workspace > .section-heading { align-items: flex-start; gap: 14px; flex-wrap: wrap; } .campus-room-list { max-height: 160px; grid-template-columns: repeat(3, minmax(0, 1fr)); } .campus-room-list button { gap: 4px; flex-wrap: wrap; } .campus-model-caption { top: 15px; left: 15px; } }
