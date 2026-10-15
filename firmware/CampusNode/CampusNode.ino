@@ -17,6 +17,8 @@ static constexpr int I2C_SCL_PIN = 4;
 
 static constexpr uint32_t SAMPLE_INTERVAL_MS = 60UL * 1000UL;
 static constexpr uint32_t HANDSHAKE_INTERVAL_MS = 120UL * 1000UL;
+static constexpr uint32_t HANDSHAKE_RETRY_MS = 5000UL;
+static constexpr uint32_t TLS_HANDSHAKE_TIMEOUT_SECONDS = 15UL;
 static constexpr uint32_t TIME_SYNC_RETRY_MS = 60UL * 1000UL;
 static constexpr uint32_t FIRST_SAMPLE_DELAY_MS = 7000UL;
 static constexpr uint32_t MAX_RETRY_MS = 15UL * 60UL * 1000UL;
@@ -26,7 +28,7 @@ static constexpr uint32_t WIFI_RETRY_DELAY_MS = 2000UL;
 static constexpr uint8_t WIFI_RETRIES_PER_NETWORK = 5;
 static constexpr uint8_t RAM_QUEUE_CAPACITY = 30;
 static constexpr uint8_t UPLOAD_BATCH_SIZE = 20;
-static const char *FIRMWARE_VERSION = "2026.10.15-direct-upload";
+static const char *FIRMWARE_VERSION = "2026.10.15-direct-upload-retry";
 static constexpr uint32_t BACKLOG_UPLOAD_DELAY_MS = 1000UL;
 
 struct WifiCredential {
@@ -57,6 +59,7 @@ bool clockReady = false;
 bool handshakeConfirmed = false;
 uint32_t nextSampleAt = 0;
 uint32_t nextHandshakeAt = 0;
+uint32_t handshakeAttemptCount = 0;
 uint32_t nextTimeSyncAttemptAt = 0;
 uint32_t nextWifiAttemptAt = 0;
 uint32_t wifiConnectDeadline = 0;
@@ -168,6 +171,7 @@ bool confirmServerHandshake() {
 
   WiFiClientSecure secureClient;
   secureClient.setCACert(TLS_ROOT_CA_PEM);
+  secureClient.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_SECONDS);
   HTTPClient http;
   http.setConnectTimeout(10000);
   http.setTimeout(15000);
@@ -195,6 +199,7 @@ bool confirmServerHandshake() {
                   status, http.errorToString(status).c_str());
   } else {
     Serial.printf("Website handshake rejected (HTTP %d); no upload attempted.\n", status);
+    if (status == 401) Serial.println("Check DEVICE_API_TOKEN in server .env and firmware/secrets.h.");
   }
   return false;
 }
@@ -215,6 +220,7 @@ bool postPendingBatch() {
 
   WiFiClientSecure secureClient;
   secureClient.setCACert(TLS_ROOT_CA_PEM);
+  secureClient.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_SECONDS);
   HTTPClient http;
   http.setConnectTimeout(10000);
   http.setTimeout(15000);
@@ -272,6 +278,7 @@ void maintainWifi() {
     if (!wifiWasConnected) {
       wifiWasConnected = true;
       handshakeConfirmed = false;
+      handshakeAttemptCount = 0;
       nextHandshakeAt = millis();
       nextTimeSyncAttemptAt = millis();
       Serial.printf("Connected to %s; IP: %s\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
@@ -399,6 +406,7 @@ void setup() {
   Serial.println(shtReady ? "SHT31 detected." : "SHT31 not detected; SCD41 temperature/RH will be used.");
 
   Serial.printf("Direct HTTPS upload enabled; RAM retry queue capacity %u; no SD required.\n", RAM_QUEUE_CAPACITY);
+  Serial.println("Website handshake: retry every 5 seconds after failure until confirmed; then every 120 seconds.");
 
   beginWifi();
   nextSampleAt = millis() + FIRST_SAMPLE_DELAY_MS;
@@ -412,9 +420,18 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED && clockReady &&
       static_cast<int32_t>(millis() - nextHandshakeAt) >= 0) {
     const uint32_t handshakeStartedAt = millis();
+    Serial.printf("Website handshake attempt %lu starting.\n", static_cast<unsigned long>(++handshakeAttemptCount));
     handshakeConfirmed = confirmServerHandshake();
-    nextHandshakeAt = handshakeStartedAt + HANDSHAKE_INTERVAL_MS;
-    if (handshakeConfirmed) nextUploadAt = millis();
+    // Schedule after completion so a slow request cannot create a tight retry loop.
+    const uint32_t handshakeFinishedAt = millis();
+    nextHandshakeAt = handshakeFinishedAt + (handshakeConfirmed ? HANDSHAKE_INTERVAL_MS : HANDSHAKE_RETRY_MS);
+    Serial.printf("Website handshake finished in %lu ms; next attempt in %lu seconds.\n",
+                  static_cast<unsigned long>(handshakeFinishedAt - handshakeStartedAt),
+                  static_cast<unsigned long>((handshakeConfirmed ? HANDSHAKE_INTERVAL_MS : HANDSHAKE_RETRY_MS) / 1000UL));
+    if (handshakeConfirmed) {
+      handshakeAttemptCount = 0;
+      nextUploadAt = handshakeFinishedAt;
+    }
   }
 
   if (static_cast<int32_t>(millis() - nextSampleAt) >= 0) {
