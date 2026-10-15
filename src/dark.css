@@ -1,0 +1,61 @@
+/* Shared charcoal palette. Color is reserved for archive selection and warnings. */
+:root { color-scheme: dark; color: #ededed; background: #161616; --ink: #ededed; --muted: #999; --line: #363636; --paper: #202020; --soft-shadow: 0 16px 60px #0002; }
+body, .atlas-shell { color: #ededed; background: #191919; }
+.side-rail { background: #101010; border-color: #303030; box-shadow: none; }
+.glass-topbar { background: #191919ed; border-color: #303030; }
+.glass-panel, .hero-banner, .metric-primary, .interval-tile { background: linear-gradient(135deg, #242424dd, #1e1e1edd); border-color: #383838; box-shadow: var(--soft-shadow); }
+.glass-panel::before { background: linear-gradient(90deg, transparent, #ffffff12, transparent); }
+.page-heading-row h1, .hero-copy h2, .section-heading h2, .metric-value-row strong, .overview-tile > strong, .average-values strong, .chart-title-row strong, .placement-copy > strong, .device-dialog h2, .plant-log-main strong, .workspace-empty strong, .map-point-card h3, .device-info-card strong, .device-details strong, .breadcrumb strong, .chart-empty strong { color: #ededed; }
+.breadcrumb, .update-hint, .eyebrow, .section-kicker, .hero-kicker, .hero-meta, .page-heading-row p, .hero-copy p, .time-note, .metric-label, .metric-unit, .metric-status, .metric-note, .overview-label, .overview-caption, .average-values strong small, .average-values > div > span, .overview-tile > strong small, .chart-title-row > div span, .chart-sample-count, .chart-axis-labels, .anomaly-summary, .anomaly-method, .readings-note, .readings-table thead th, .readings-table tbody td small, .record-time, .placement-kicker, .placement-copy p, .placement-note, .device-dialog > p, .workspace-intro, .plant-form label, .plant-log-main span, .workspace-empty, .map-status, .map-status.active, .map-point-card p, .map-point-id, .pending-point-note, .device-info-card span, .device-details > div > span, .detail-state, .weak-network-note, .page-footer { color: #a1a1a1; }
+.location-button, .connection-pill, .connection-pill.connected, .icon-button, .record-badge, .metric-icon, .device-icon, .device-info-card, .status-chip, .status-chip.is-online, .plant-log-point, .map-point-card, .map-marker, .map-marker-dot, .plant-marker .map-marker-dot, .dialog-note { color: #ddd; border-color: #454545; background: #252525; }
+.online-dot, .tiny-status.online, .status-chip.is-online .status-dot, .device-signal i, .device-signal.signal-on i, .map-status i, .map-status.active i { background: #d1d1d1; }
+.orb-label, .orb-label span, .hero-footnote { color: #a0a0a0; }
+.sensor-orb { background: linear-gradient(145deg, #333, #202020); border-color: #444; box-shadow: 0 20px 45px #0003; }
+.sensor-orb-inner { color: #ddd; border-color: #4b4b4b; background: #2b2b2b; box-shadow: none; }
+.hero-halo { border-color: #ffffff0a; }
+.segmented { background: #141414; border-color: #353535; }
+.segmented button { color: #9c9c9c; }
+.segmented button:hover { color: #fff; }
+.segmented button.selected { color: #101010; background: #e3e3e3; }
+.chart-gridline { stroke: #ffffff17; }
+.readings-table tbody td { color: #ddd; border-color: #383838; }
+.readings-note a, .readings-note a:hover { color: #ddd; }
+.placement-visual, .campus-map { background: #222; border-color: #3b3b3b; }
+.placement-room { background: #252525; border-color: #777; box-shadow: inset 0 0 0 10px #2c2c2c; }
+.placement-door, .placement-window { background: #333; border-color: #777; }
+.placement-device { color: #ddd; background: #3b3b3b; border-color: #777; }
+.map-building, .building-two { color: #b0b0b0; background: #303030; border-color: #484848; }
+.map-marker:hover, .map-marker.selected { color: #fff; }
+.plant-form input, .plant-form select { color: #eee; background: #191919; border-color: #494949; }
+.plant-form input:focus, .plant-form select:focus { border-color: #bbb; box-shadow: 0 0 0 3px #ffffff0b; }
+.plant-log-row, .weak-network-note { border-color: #3a3a3a; }
+.quiet-icon-button, .weak-network-note svg { color: #aaa; }
+.quiet-icon-button:hover { color: #fff; background: #303030; border-color: #555; }
+.primary-action, .dialog-primary { color: #121212; background: #e3e3e3; border-color: #e3e3e3; }
+.primary-action:hover { color: #111; background: #fff; }
+.location-menu { background: #222; border-color: #484848; }
+.location-menu button { color: #ccc; }
+.location-menu small { color: #999; }
+.location-menu button:hover, .location-menu button.selected { background: #333; color: #fff; }
+.mobile-nav { background: #151515f5; border-color: #383838; }
+.mobile-nav button, .mobile-nav a { color: #999; }
+.mobile-nav button.active { color: #fff; background: #303030; }
+.atlas-shell.archive-view { min-height: 0; }
+/* Industrial accents: one added hue, with red still reserved for anomalies. */
+:root { --industrial-yellow: #f5cf3e; --selection-blue: #6dcaff; }
+.rail-link.active { border-radius: 2px; border-left: 2px solid var(--selection-blue); background: linear-gradient(90deg, #6dcaff0f, #ffffff04); }
+.rail-link.active > svg { color: var(--selection-blue); }
+.rail-link.active .rail-indicator { background: var(--selection-blue); box-shadow: none; }
+.brand-mark span:last-child { background: var(--industrial-yellow); }
+.eyebrow-line { background: var(--industrial-yellow); }
+.glass-panel { border-radius: 8px; }
+.segmented, .segmented button, .location-button { border-radius: 3px; }
+.segmented button.selected { background: var(--selection-blue); color: #171717; }
+.section-kicker, .eyebrow { font-family: "Consolas", "Microsoft YaHei", monospace; letter-spacing: .14em; }
+.mobile-nav button.active { color: var(--selection-blue); }
+.chart-range-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; margin: 12px 3px 0; color: #999; font: 10px "Consolas", "Microsoft YaHei", monospace; }
+.chart-range-status > span:last-child { color: #bdbdbd; }
+@media (max-width: 670px) {
+  .chart-axis-labels > span:nth-child(2), .chart-axis-labels > span:nth-child(4) { display: none; }
+  .chart-range-status { font-size: 9px; }
+}

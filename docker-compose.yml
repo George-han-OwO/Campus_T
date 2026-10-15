@@ -1,0 +1,38 @@
+services:
+  atlas:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_PATH: /data/campus-atlas.sqlite
+      DEVICE_API_TOKEN: ${DEVICE_API_TOKEN:?Run scripts/init-env.mjs to generate a device token}
+    volumes:
+      - campus_atlas_data:/data
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Create a remotely-managed Cloudflare Tunnel and add its token to .env}
+    depends_on:
+      atlas:
+        condition: service_healthy
+
+volumes:
+  campus_atlas_data:

@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.example
+data
+firmware/secrets.h
+firmware/CampusNode/secrets.h
+.sites-runtime
+.wrangler
+outputs
+tmp

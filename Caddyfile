@@ -1,0 +1,7 @@
+{$SITE_DOMAIN} {
+	tls {
+		issuer acme https://acme-v02.api.letsencrypt.org/directory
+	}
+	encode zstd gzip
+	reverse_proxy atlas:3000
+}

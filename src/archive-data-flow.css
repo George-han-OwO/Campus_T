@@ -1,0 +1,49 @@
+.archive-view > .main-column { position: relative; }
+.archive-view .archive-data-flow {
+  /* The large archive diamond uses 14px at 10x; this layer uses 15x. */
+  --flow-blur: 21px;
+  position: absolute;
+  z-index: 0;
+  inset: 66px 0 0;
+  overflow: hidden;
+  margin: 0;
+  color: #f1f1f1;
+  pointer-events: none;
+}
+.archive-data-flow > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: blur(var(--flow-blur));
+}
+.archive-view .page-content,
+.archive-view .mobile-nav { position: relative; z-index: 1; }
+.archive-data-flow .local-chevron,
+.archive-data-flow .local-base {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.archive-data-flow .local-chevron { transform-box: fill-box; transform-origin: center; }
+.archive-data-flow .local-chevron-back { opacity: .55; animation: local-lift 2.6s cubic-bezier(.45,0,.55,1) infinite; }
+.archive-data-flow .local-chevron-front { animation: local-drop 2.6s cubic-bezier(.45,0,.55,1) infinite; }
+@keyframes local-lift { 0%, 100% { transform: translateY(5px); } 50% { transform: translateY(-7px); } }
+@keyframes local-drop { 0%, 100% { transform: translateY(-5px); } 50% { transform: translateY(7px); } }
+.archive-data-flow .local-base { opacity: .76; }
+.archive-data-flow .local-impact { fill: none; stroke: #fff; stroke-width: 1.2; opacity: 0; vector-effect: non-scaling-stroke; animation: local-impact 5s cubic-bezier(.18,.7,.22,1) infinite; }
+@keyframes local-impact { 0%, 27%, 100% { opacity: 0; transform: scaleX(.5); } 31.5% { opacity: .65; transform: scaleX(1.4); } 36% { opacity: .18; transform: scaleX(.8); } }
+.archive-data-flow .archive-packet path { fill: none; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.archive-data-flow .packet-primary { filter: drop-shadow(0 0 9px rgb(255 255 255 / 60%)); }
+@media (max-width: 700px) {
+  .archive-view .archive-data-flow { inset-block-start: 58px; }
+  .archive-data-flow > svg { width: 150%; margin-left: -16%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-data-flow * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  .archive-data-flow .packet-upper-layer,
+  .archive-data-flow .packet-lower-layer { display: none; }
+}
