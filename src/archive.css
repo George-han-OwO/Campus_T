@@ -1,7 +1,6 @@
 /* A transparent instrument: the rails stay still while wireframe planes move. */
 .archive-view { position: relative; isolation: isolate; background: #191919; }
-.archive-view > .archive-backdrop,
-.overview-view > .archive-backdrop {
+.archive-view > .archive-backdrop {
   position: fixed;
   z-index: 0;
   top: 50%;
