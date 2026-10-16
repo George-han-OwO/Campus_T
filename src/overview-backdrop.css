@@ -3,8 +3,8 @@
 .overview-view > .side-rail { z-index: 3; }
 .overview-view > .main-column { position: relative; z-index: 1; }
 .overview-model-host {
-  /* 35% visual blur strength on a 0–40px design range. */
-  --overview-model-blur: 14px;
+  /* Increase clarity by 1.5x from the initial 14px blur: 14 / 1.5. */
+  --overview-model-blur: 9.33px;
   position: absolute;
   inset: -40px -40px -40px calc(var(--overview-rail) - 40px);
   filter: grayscale(1) blur(var(--overview-model-blur));
