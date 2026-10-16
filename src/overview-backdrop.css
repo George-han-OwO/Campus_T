@@ -2,7 +2,7 @@
 .overview-view > .overview-backdrop { --overview-rail: 246px; position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; user-select: none; }
 .overview-view > .side-rail { z-index: 3; }
 .overview-view > .main-column { position: relative; z-index: 1; }
-.overview-prism { position: absolute; top: 50%; left: calc(var(--overview-rail) + 26px); height: min(106dvh, 1060px); width: auto; aspect-ratio: 320 / 700; overflow: visible; transform: translateY(-50%) scaleX(4.2); transform-origin: 10.625% 50%; filter: blur(12px) drop-shadow(0 0 36px #ffffff30); animation: overview-white-breathe 8s ease-in-out infinite; will-change: opacity; }
+.overview-prism { position: absolute; top: 50%; left: calc(var(--overview-rail) + 26px); height: min(106dvh, 1060px); width: auto; aspect-ratio: 435 / 775; overflow: visible; transform: translateY(-50%); filter: blur(12px) drop-shadow(0 0 36px #ffffff30); animation: overview-white-breathe 8s ease-in-out infinite; will-change: opacity; }
 .overview-prism-halo { filter: blur(15px); }
 @keyframes overview-white-breathe { 0%, 100% { opacity: .35; } 50% { opacity: .95; } }
 @media (max-width: 1150px) { .overview-view > .overview-backdrop { --overview-rail: 220px; } }
