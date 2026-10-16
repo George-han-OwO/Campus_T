@@ -401,7 +401,7 @@ export default function Dashboard() {
   return (
     <main className={`atlas-shell ${activeView === "database" ? "archive-view" : activeView === "overview" ? "overview-view" : ""}`}>
       {activeView === "overview" && <OverviewBackdrop />}
-      {activeView === "database" && <ArchiveBackdrop />}
+      {(activeView === "overview" || activeView === "database") && <ArchiveBackdrop />}
       <aside className="side-rail">
         <div className="brand-lockup">
           <div className="brand-mark"><span /><span /><span /><span /></div>

@@ -1,4 +1,4 @@
-/** Decorative archive motif. Kept behind the app UI so it never blocks records or controls. */
+/** Shared overview/archive motif, behind the app UI and clear of all controls. */
 export default function ArchiveBackdrop() {
   return (
     <svg className="archive-backdrop" viewBox="0 0 1082 1875" fill="none" aria-hidden="true">
