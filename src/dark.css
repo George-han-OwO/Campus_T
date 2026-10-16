@@ -5,10 +5,10 @@ body, .atlas-shell { color: #ededed; background: #191919; }
 .glass-topbar { background: #191919ed; border-color: #303030; }
 .glass-panel, .hero-banner, .metric-primary, .interval-tile { background: linear-gradient(135deg, #242424dd, #1e1e1edd); border-color: #383838; box-shadow: var(--soft-shadow); }
 .glass-panel::before { background: linear-gradient(90deg, transparent, #ffffff12, transparent); }
-/* Overview panels expose the animated backdrop through an unfilled black outline. */
+/* Overview panels expose the animated backdrop through an unfilled white outline. */
 .overview-view .page-content .glass-panel {
   background: transparent;
-  border: 1px solid #000;
+  border: 1px solid #fff;
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
