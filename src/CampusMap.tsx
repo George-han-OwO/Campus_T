@@ -149,7 +149,11 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
         model.traverse(object => {
           if (!(object instanceof THREE.Mesh)) return;
           originalMaterials.set(object, object.material);
-          const id = object.userData.roomId;
+          const id = typeof object.userData.roomId === "string"
+            ? object.userData.roomId
+            : typeof object.userData.id === "string"
+              ? object.userData.id
+              : undefined;
           const materials = Array.isArray(object.material) ? object.material : [object.material];
           for (const material of materials) {
             if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshBasicMaterial) {
@@ -199,7 +203,7 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
           <button type="button" disabled={state !== "ready"} onClick={() => { setTop(value => !value); api.current?.focus(undefined, !top); }}><RotateCcw size={15} />{top ? "立体" : "俯视"}</button>
           <button type="button" disabled={state !== "ready"} onClick={() => api.current?.focus(room, top)}><LocateFixed size={15} />聚焦 {room}</button>
         </div>
-        {state !== "ready" ? <div className="campus-model-overlay" role="status"><strong>{state === "loading" ? "正在载入三维地图…" : "暂时无法显示地图"}</strong><span>{state === "loading" ? "首次加载约 5.9 MB" : error}</span>{state === "error" ? <button type="button" onClick={() => setRetry(count => count + 1)}>重新加载</button> : null}</div> : null}
+        {state !== "ready" ? <div className="campus-model-overlay" role="status"><strong>{state === "loading" ? "正在载入三维地图…" : "暂时无法显示地图"}</strong><span>{state === "loading" ? "首次加载约 7.2 MB" : error}</span>{state === "error" ? <button type="button" onClick={() => setRetry(count => count + 1)}>重新加载</button> : null}</div> : null}
       </div>
       <aside className="campus-room-panel">
         <div className="section-kicker">FIND A ROOM</div>
