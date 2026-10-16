@@ -2,7 +2,6 @@
 import ArchiveWorkspace from "./ArchiveWorkspace";
 import DeviceStatus, { useDeviceStatus } from "./DeviceStatus";
 import ArchiveBackdrop from "./ArchiveBackdrop";
-import OverviewBackdrop from "./OverviewBackdrop";
 import ArchiveDataFlow from "./ArchiveDataFlow";
 import { chartTimeLabel, chartTimeScale } from "./chartTimeScale";
 import { locationLabel } from "./locations";
@@ -400,7 +399,6 @@ export default function Dashboard() {
 
   return (
     <main className={`atlas-shell ${activeView === "database" ? "archive-view" : activeView === "overview" ? "overview-view" : ""}`}>
-      {activeView === "overview" && <OverviewBackdrop />}
       {activeView === "database" && <ArchiveBackdrop />}
       <aside className="side-rail">
         <div className="brand-lockup">
