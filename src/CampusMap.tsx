@@ -4,6 +4,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { Activity, LocateFixed, Maximize, RotateCcw, Search } from "lucide-react";
 import { roomForLocation } from "./locations";
+import RoomModelViewer from "./RoomModelViewer";
 import "./campus-map.css";
 
 type MapDevice = { device_id: string; location_id: string; handshake: string; last_handshake_at: string | null };
@@ -41,6 +42,10 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [top, setTop] = useState(false);
+  const [viewMode, setViewMode] = useState<"campus" | "room">("campus");
+  const previousViewMode = useRef(viewMode);
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
   const roomDevices = devices.filter(device => roomForLocation(device.location_id) === room);
   const selectRoom = (id: string) => {
     setRoom(id);
@@ -50,6 +55,10 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
   };
   pick.current = selectRoom;
   useEffect(() => { const id = roomForLocation(selectedPoint); if (rooms.includes(id)) { setRoom(id); api.current?.select(id); } }, [selectedPoint, rooms]);
+  useEffect(() => {
+    if (previousViewMode.current === "room" && viewMode === "campus" && rooms.includes(room)) api.current?.focus(room, top);
+    previousViewMode.current = viewMode;
+  }, [room, rooms, top, viewMode]);
 
   useEffect(() => {
     const container = host.current;
@@ -94,7 +103,8 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
         camera.position.lerp(destination.position, ease); controls!.target.lerp(destination.target, ease);
         if (camera.position.distanceTo(destination.position) < .025) destination = null;
       }
-      controls!.update(); renderer.render(scene, camera);
+      controls!.update();
+      if (viewModeRef.current === "campus") renderer.render(scene, camera);
       frame = requestAnimationFrame(animate);
     };
     const onControlStart = () => { destination = null; };
@@ -105,7 +115,7 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
     const highlight = new THREE.MeshBasicMaterial({ color: 0x6dcaff, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     let bounds: THREE.Box3 | null = null;
     const focus = (id?: string, topView = false) => {
-      if (!bounds) return;
+      if (!bounds || viewModeRef.current === "room") return;
       const targetBounds = id && roomMeshes.has(id) ? new THREE.Box3().setFromObject(roomMeshes.get(id)!) : bounds;
       const target = targetBounds.getCenter(new THREE.Vector3());
       const offset = topView ? new THREE.Vector3(0, 1, .001) : new THREE.Vector3(.55, .95, .9).normalize();
@@ -197,12 +207,19 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
     <div className="campus-3d-layout">
       <div className="campus-3d-stage">
         <div className="campus-model-host" ref={host} />
+        {viewMode === "room" ? <RoomModelViewer roomId={room} onSelectRoom={selectRoom} /> : null}
+        <div className="campus-model-views" role="group" aria-label="模型视图切换">
+          <button type="button" aria-pressed={viewMode === "campus"} onClick={() => setViewMode("campus")}>全校模型</button>
+          <button type="button" aria-pressed={viewMode === "room"} onClick={() => setViewMode("room")}>独立房间</button>
+        </div>
+        {viewMode === "campus" ? <>
         <div className="campus-model-caption"><span>FF—01 / FLOOR MODEL</span><strong>{room}</strong><span>SELECTED ROOM</span></div>
         <div className="campus-model-controls" aria-label="地图视角控制">
           <button type="button" disabled={state !== "ready"} onClick={() => { setTop(false); api.current?.focus(); }} title="查看全图"><Maximize size={15} />全图</button>
           <button type="button" disabled={state !== "ready"} onClick={() => { setTop(value => !value); api.current?.focus(undefined, !top); }}><RotateCcw size={15} />{top ? "立体" : "俯视"}</button>
           <button type="button" disabled={state !== "ready"} onClick={() => api.current?.focus(room, top)}><LocateFixed size={15} />聚焦 {room}</button>
         </div>
+        </> : null}
         {state !== "ready" ? <div className="campus-model-overlay" role="status"><strong>{state === "loading" ? "正在载入三维地图…" : "暂时无法显示地图"}</strong><span>{state === "loading" ? "首次加载约 7.2 MB" : error}</span>{state === "error" ? <button type="button" onClick={() => setRetry(count => count + 1)}>重新加载</button> : null}</div> : null}
       </div>
       <aside className="campus-room-panel">
