@@ -19,8 +19,8 @@
 .isolated-room-label small { letter-spacing: .04em; }
 .room-carousel-arrow { position: absolute; z-index: 4; top: 50%; display: grid; place-items: center; width: 48px; height: 62px; transform: translateY(-50%); border: 1px solid #ffffff20; color: #ddd; background: #08080840; backdrop-filter: blur(12px); cursor: pointer; transition: background .25s ease, border-color .25s ease, color .25s ease; }
 .room-carousel-arrow:hover { color: #fff; border-color: #ffffff70; background: #ffffff12; }
-.room-carousel-arrow--previous { left: 3%; }
-.room-carousel-arrow--next { right: min(30vw, 390px); }
+.room-carousel-arrow--previous { left: 1%; }
+.room-carousel-arrow--next { right: calc(min(320px, 27%) + 30px); }
 .room-carousel-neighbors { position: absolute; z-index: 3; bottom: 22px; left: 50%; display: flex; gap: min(42vw, 620px); transform: translateX(-50%); color: #777; font: 10px Consolas, monospace; letter-spacing: .12em; pointer-events: none; }
 .isolated-room-error { position: absolute; inset: auto 16px 18px; z-index: 4; color: #ddd; background: #1b1b1bf0; border: 1px solid #ffffff30; padding: 12px 14px; font-size: 12px; }
 .campus-model-host canvas:focus-visible { outline: 1px solid #6dcaff; outline-offset: -2px; }
@@ -50,5 +50,5 @@
 .campus-room-device strong { color: #eee; overflow-wrap: anywhere; }
 .campus-room-device span { color: #aaa; }
 .campus-room-detail .primary-action { margin-block: 16px; }
-@media (max-width: 1100px) { .campus-3d-stage { min-height: 660px; height: 78vh; } .campus-room-panel { width: min(290px, 31%); right: 14px; padding: 16px; } .room-carousel-arrow--next { right: 32%; } }
+@media (max-width: 1100px) { .campus-3d-stage { min-height: 660px; height: 78vh; } .campus-room-panel { width: min(290px, 31%); right: 14px; padding: 16px; } .room-carousel-arrow--next { right: calc(min(290px, 31%) + 24px); } }
 @media (max-width: 760px) { .campus-3d-stage { min-height: 720px; height: auto; } .campus-3d-workspace > .section-heading { align-items: flex-start; gap: 14px; flex-wrap: wrap; } .campus-room-panel { position: absolute; top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 42%; padding: 12px; } .campus-room-list { max-height: 100px; grid-template-columns: repeat(3, minmax(0, 1fr)); } .campus-room-list button { gap: 4px; flex-wrap: wrap; } .campus-model-caption { top: 15px; left: 15px; } .campus-model-views { top: 12px; right: 12px; } .campus-model-views button { padding: 7px 9px; font-size: 10px; } .isolated-room-label { top: 25%; left: 20px; transform: none; width: auto; max-width: calc(100% - 40px); gap: 5px; padding: 0; } .isolated-room-label strong { font-size: 44px; } .isolated-room-label em { font-size: 13px; } .isolated-room-label small { font-size: 8px; } .room-carousel-heading { top: 18px; left: 18px; } .room-carousel-arrow { top: 48%; width: 36px; height: 48px; } .room-carousel-arrow--previous { left: 12px; } .room-carousel-arrow--next { right: 12px; } .room-carousel-neighbors { bottom: 47%; gap: 52vw; font-size: 8px; } }
