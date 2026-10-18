@@ -202,10 +202,12 @@ export default function RoomModelViewer({ roomId, onSelectRoom }: { roomId: stri
       setRoomLabel(room.name);
       setRoomKind(room.kindLabel);
       activeRoomRef.current = room.id;
-      for (let relative = -2; relative <= 2; relative += 1) {
-        const slot = relative + 2;
-        const wrappedIndex = (index + relative + rooms.length) % rooms.length;
-        const item = rooms[wrappedIndex];
+      // Treat the selected classroom as a single hero object, like the supplied
+      // product-scroller reference. Room changes animate the outgoing shell away
+      // and let the next shell settle into the same focal position.
+      for (const relative of [0]) {
+        const slot = 2;
+        const item = room;
         const group = buildRoom(item);
         const baseScale = group.scale.x;
         const targetScale = baseScale * slotScale[slot];
@@ -217,7 +219,7 @@ export default function RoomModelViewer({ roomId, onSelectRoom }: { roomId: stri
           targetX: slotX[slot],
           targetZ: slot === 2 ? 0 : -Math.abs(relative) * 1.3,
           targetY: slot === 2 ? 0 : 0.15 + Math.abs(relative) * 0.3,
-          targetScale,
+          targetScale: targetScale * 1.15,
           targetRotation,
           vx: 0, vy: 0, vz: 0, vs: 0, vr: 0,
         };

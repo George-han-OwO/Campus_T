@@ -112,7 +112,7 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
     frame = requestAnimationFrame(animate);
     const roomMeshes = new Map<string, THREE.Mesh>();
     const originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
-    const highlight = new THREE.MeshBasicMaterial({ color: 0x6dcaff, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const highlight = new THREE.MeshBasicMaterial({ color: 0xf1f1f1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     let bounds: THREE.Box3 | null = null;
     const focus = (id?: string, topView = false) => {
       if (!bounds || viewModeRef.current === "room") return;
@@ -203,7 +203,7 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
   const matches = rooms.filter(id => id.toLowerCase().includes(query.trim().toLowerCase()));
   return <section className="glass-panel campus-3d-workspace">
     <div className="section-heading"><div><div className="section-kicker">SPATIAL ATLAS / FF-01</div><h2>校园三维地图</h2></div><span className="record-badge">{rooms.length || "—"} 个房间 · 当前设备 M104</span></div>
-    <p className="workspace-intro">使用你提供的 FF-01 模型。拖动旋转、滚轮缩放、右键平移；点击房间查看详情。房间边界来自模型，实际安装位置由你确认。</p>
+    <p className="workspace-intro">FF-01 校园空间模型。滚动切换教室，拖动观察空间；搜索房间编号或选择已接入设备的点位。</p>
     <div className="campus-3d-layout">
       <div className="campus-3d-stage">
         <div className="campus-model-host" ref={host} />
