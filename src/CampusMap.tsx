@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { Activity, LocateFixed, Maximize, RotateCcw, Search } from "lucide-react";
+import { Activity, LocateFixed, Maximize, RotateCcw, Search, X } from "lucide-react";
 import { roomForLocation } from "./locations";
-import RoomModelViewer from "./RoomModelViewer";
+import RoomModelViewer, { roomCatalog } from "./RoomModelViewer";
 import "./campus-map.css";
 
 type MapDevice = { device_id: string; location_id: string; handshake: string; last_handshake_at: string | null };
@@ -36,13 +36,17 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
   const [room, setRoom] = useState(() => roomForLocation(selectedPoint));
   const selectedRoom = useRef(room);
   selectedRoom.current = room;
-  const [rooms, setRooms] = useState<string[]>([]);
+  const [rooms, setRooms] = useState<string[]>(() => roomCatalog.map(item => item.id).sort((a, b) => a.localeCompare(b, "en", { numeric: true })));
   const [query, setQuery] = useState("");
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const directory = useRef<HTMLElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [top, setTop] = useState(false);
-  const [viewMode, setViewMode] = useState<"campus" | "room">("campus");
+  const [viewMode, setViewMode] = useState<"campus" | "room">("room");
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [viewMode]);
   const previousViewMode = useRef(viewMode);
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
@@ -54,13 +58,32 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
     if (device) onSelectPoint(device.location_id);
   };
   pick.current = selectRoom;
-  useEffect(() => { const id = roomForLocation(selectedPoint); if (rooms.includes(id)) { setRoom(id); api.current?.select(id); } }, [selectedPoint, rooms]);
+  useEffect(() => { const id = roomForLocation(selectedPoint); if (roomCatalog.some(item => item.id === id)) { setRoom(id); api.current?.select(id); } }, [selectedPoint]);
+  useEffect(() => {
+    if (!directoryOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    search.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setDirectoryOpen(false); return; }
+      if (event.key !== "Tab") return;
+      const focusable = directory.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, [tabindex="0"]');
+      if (!focusable?.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = previousOverflow; if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+  }, [directoryOpen]);
   useEffect(() => {
     if (previousViewMode.current === "room" && viewMode === "campus" && rooms.includes(room)) api.current?.focus(room, top);
     previousViewMode.current = viewMode;
   }, [room, rooms, top, viewMode]);
 
   useEffect(() => {
+    if (viewMode !== "campus") return;
     const container = host.current;
     if (!container) return;
     let disposed = false;
@@ -198,42 +221,52 @@ export default function CampusMap({ selectedPoint, onSelectPoint, devices, onOpe
       if (model) disposeObject(model);
       highlight.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
     };
-  }, [retry]);
+  }, [retry, viewMode]);
 
   const matches = rooms.filter(id => id.toLowerCase().includes(query.trim().toLowerCase()));
-  return <section className="glass-panel campus-3d-workspace">
-    <div className="section-heading"><div><div className="section-kicker">SPATIAL ATLAS / FF-01</div><h2>校园三维地图</h2></div><span className="record-badge">{rooms.length || "—"} 个房间 · 当前设备 M104</span></div>
-    <p className="workspace-intro">FF-01 校园空间模型。滚动切换教室，拖动观察空间；搜索房间编号或选择已接入设备的点位。</p>
-    <div className="campus-3d-layout">
+  const canOpenData = room === "M104" || roomDevices.length > 0;
+  const handshakeLabel = roomDevices.some(device => device.handshake === "online") ? "握手在线" : roomDevices.some(device => device.handshake === "expired") ? "握手已超时" : canOpenData ? "握手状态待确认" : "尚未接入";
+  const openRoomData = () => { onSelectPoint(roomDevices[0]?.location_id ?? "M1"); onOpenOverview(); window.scrollTo({ top: 0, behavior: "instant" }); };
+  const chooseRoom = (id: string) => { selectRoom(id); api.current?.focus(id, top); setDirectoryOpen(false); };
+  return <section className="campus-3d-workspace" data-mode={viewMode}>
+    <div className="spatial-toolbar">
+      <div className="spatial-wordmark"><span />CAMPUS / FF—01<small>{rooms.length} SPACES</small></div>
+      <div className="spatial-toolbar-actions">
+        <div className="campus-model-views" role="group" aria-label="模型视图切换">
+          <button type="button" aria-pressed={viewMode === "room"} onClick={() => setViewMode("room")}>沉浸浏览</button>
+          <button type="button" aria-pressed={viewMode === "campus"} onClick={() => setViewMode("campus")}>全校地图</button>
+        </div>
+        <button className="spatial-directory-button" type="button" aria-haspopup="dialog" aria-expanded={directoryOpen} onClick={() => { setQuery(""); setDirectoryOpen(true); }}><Search size={15} /><span>选择教室</span><strong>{room}</strong></button>
+      </div>
+    </div>
+    {viewMode === "room" ? <RoomModelViewer roomId={room} onSelectRoom={selectRoom} onChooseRoom={() => { setQuery(""); setDirectoryOpen(true); }} onOpenData={openRoomData} canOpenData={canOpenData} deviceCount={roomDevices.length} handshakeLabel={handshakeLabel} /> : <div className="campus-3d-layout">
       <div className="campus-3d-stage">
         <div className="campus-model-host" ref={host} />
-        {viewMode === "room" ? <RoomModelViewer roomId={room} onSelectRoom={selectRoom} /> : null}
-        <div className="campus-model-views" role="group" aria-label="模型视图切换">
-          <button type="button" aria-pressed={viewMode === "campus"} onClick={() => setViewMode("campus")}>全校模型</button>
-          <button type="button" aria-pressed={viewMode === "room"} onClick={() => setViewMode("room")}>独立房间</button>
-        </div>
-        {viewMode === "campus" ? <>
         <div className="campus-model-caption"><span>FF—01 / FLOOR MODEL</span><strong>{room}</strong><span>SELECTED ROOM</span></div>
         <div className="campus-model-controls" aria-label="地图视角控制">
           <button type="button" disabled={state !== "ready"} onClick={() => { setTop(false); api.current?.focus(); }} title="查看全图"><Maximize size={15} />全图</button>
           <button type="button" disabled={state !== "ready"} onClick={() => { setTop(value => !value); api.current?.focus(undefined, !top); }}><RotateCcw size={15} />{top ? "立体" : "俯视"}</button>
           <button type="button" disabled={state !== "ready"} onClick={() => api.current?.focus(room, top)}><LocateFixed size={15} />聚焦 {room}</button>
+          <button type="button" onClick={() => setViewMode("room")}>走进 {room}</button>
         </div>
-        </> : null}
+        <div className="campus-model-help">拖动旋转 · 滚轮缩放 · 点击房间选择</div>
         {state !== "ready" ? <div className="campus-model-overlay" role="status"><strong>{state === "loading" ? "正在载入三维地图…" : "暂时无法显示地图"}</strong><span>{state === "loading" ? "首次加载约 7.2 MB" : error}</span>{state === "error" ? <button type="button" onClick={() => setRetry(count => count + 1)}>重新加载</button> : null}</div> : null}
       </div>
-      <aside className="campus-room-panel">
-        <div className="section-kicker">FIND A ROOM</div>
-        <label className="campus-room-search"><Search size={16} /><input aria-label="搜索房间编号" placeholder="搜索房间，例如 M104" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && matches.length) { selectRoom(matches[0]); api.current?.focus(matches[0], top); } }} /></label>
-        <div className="campus-room-list" aria-label="房间列表">{matches.map(id => <button type="button" key={id} aria-pressed={room === id} onClick={() => { selectRoom(id); api.current?.focus(id, top); }}>{id}{id === "M104" ? <span>当前设备</span> : null}</button>)}{state === "ready" && !matches.length ? <p>没有匹配的房间</p> : null}</div>
+    </div>}
+    {directoryOpen ? <div className="spatial-directory-layer">
+      <button className="spatial-directory-backdrop" type="button" tabIndex={-1} aria-label="关闭教室目录" onClick={() => setDirectoryOpen(false)} />
+      <aside className="campus-room-panel" ref={directory} role="dialog" aria-modal="true" aria-labelledby="room-directory-title">
+        <div className="spatial-directory-heading"><div><span className="section-kicker">FIND YOUR SPACE</span><h2 id="room-directory-title">找到那间教室。</h2></div><button type="button" aria-label="关闭教室目录" onClick={() => setDirectoryOpen(false)}><X size={20} /></button></div>
+        <label className="campus-room-search"><Search size={16} /><input ref={search} aria-label="搜索房间编号" placeholder="搜索房间，例如 M104" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && matches.length) { event.preventDefault(); chooseRoom(matches.find(id => id.toLowerCase() === query.trim().toLowerCase()) ?? matches[0]); } }} /></label>
+        <div className="spatial-match-count">{matches.length} 个匹配空间</div>
+        <div className="campus-room-list" aria-label="房间列表">{matches.map(id => <button type="button" key={id} aria-pressed={room === id} onClick={() => chooseRoom(id)}>{id}{id === "M104" ? <span>设备教室</span> : null}</button>)}{!matches.length ? <p>没有匹配的房间，试试其他编号。</p> : null}</div>
         <div className="campus-room-detail"><div className="section-kicker">SELECTED ROOM</div><h3>{room}</h3>
-          {room === "M104" ? <p>当前环境采集设备安装在此教室。历史数据沿用点位编号 M1。</p> : <p>模型中的房间编号；尚未确认此处安装了环境采集设备。</p>}
+          {room === "M104" ? <p>当前环境采集设备安装在此教室。历史数据沿用点位编号 M1。</p> : <p>模型中的空间编号；此处的设备安装情况尚未确认。</p>}
           {roomDevices.map(device => <div className="campus-room-device" key={device.device_id}><strong>{device.device_id}</strong><span>{device.handshake === "online" ? "握手在线" : device.handshake === "expired" ? "握手已超时" : "握手状态待确认"}</span></div>)}
-          {room === "M104" && !roomDevices.length ? <p className="campus-model-note">设备状态尚未返回，可先查看该点位历史数据。</p> : null}
-          {room === "M104" || roomDevices.length ? <button type="button" className="primary-action" onClick={() => { onSelectPoint(roomDevices[0]?.location_id ?? "M1"); onOpenOverview(); }}>查看环境数据 <Activity size={14} /></button> : null}
+          {canOpenData ? <button type="button" className="primary-action" onClick={openRoomData}>查看环境数据 <Activity size={14} /></button> : null}
         </div>
-        <p className="campus-model-note">模型可用于点位浏览。户外样方位置尚未确认，未添加推测标记。</p>
+        <p className="campus-model-note">依据 FF-01 图纸生成。位置与尺寸尚未经现场测量核验；户外样方未添加推测标记。</p>
       </aside>
-    </div>
+    </div> : null}
   </section>;
 }

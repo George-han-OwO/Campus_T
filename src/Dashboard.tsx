@@ -307,11 +307,16 @@ export default function Dashboard() {
   const [showDeviceGuide, setShowDeviceGuide] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   useEffect(() => {
+    if (activeView !== "overview") return;
     let frame = 0;
     const tick = () => { setClockNow(Date.now()); frame = requestAnimationFrame(tick); };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [activeView]);
+  useEffect(() => {
+    if (activeView === "map") window.scrollTo({ top: 0, behavior: "instant" });
+    window.history.replaceState(null, "", `#${activeView}`);
+  }, [activeView]);
 
   const refresh = useCallback(async (force = false) => {
     if (!force && requestController.current && !requestController.current.signal.aborted) return;
@@ -398,7 +403,7 @@ export default function Dashboard() {
   const clockText = `${String(clockDate.getHours()).padStart(2, "0")}:${String(clockDate.getMinutes()).padStart(2, "0")}:${String(clockDate.getSeconds()).padStart(2, "0")}.${String(clockDate.getMilliseconds()).padStart(3, "0")}`;
 
   return (
-    <main className={`atlas-shell ${activeView === "database" ? "archive-view" : activeView === "overview" ? "overview-view" : ""}`}>
+    <main className={`atlas-shell ${activeView === "database" ? "archive-view" : activeView === "overview" ? "overview-view" : activeView === "map" ? "map-view" : ""}`}>
       {activeView === "database" && <ArchiveBackdrop />}
       <aside className="side-rail">
         <div className="brand-lockup">
