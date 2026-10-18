@@ -5,6 +5,7 @@ import ArchiveBackdrop from "./ArchiveBackdrop";
 import ArchiveDataFlow from "./ArchiveDataFlow";
 import { chartTimeLabel, chartTimeScale } from "./chartTimeScale";
 import { locationLabel } from "./locations";
+import { useLanguage } from "./i18n";
 
 import {
   Activity,
@@ -196,7 +197,7 @@ function PlantWorkspace() {
       </section>
       <section className="glass-panel workspace-card plant-records-card">
         <div className="section-heading compact-heading"><div><div className="section-kicker">LOCAL LOG</div><h2>样方记录</h2></div><span className="record-badge">{entries.length} 条</span></div>
-        {entries.length ? <div className="plant-log-list">{entries.map((entry) => <article className="plant-log-row" key={entry.id}><div className="plant-log-point">{entry.point}</div><div className="plant-log-main"><strong>{entry.species} 种植物 · 覆盖率 {entry.coverage}%</strong><span>{entry.date}{entry.note ? ` · ${entry.note}` : ""}</span></div><button className="quiet-icon-button" type="button" aria-label={`删除 ${entry.point} 样方记录`} onClick={() => removeEntry(entry.id)}><Trash2 size={14} /></button></article>)}</div> : <div className="workspace-empty"><Leaf size={18} /><strong>还没有样方记录</strong><span>填写左侧表单即可开始记录；数据会保存在这台设备的浏览器中。</span></div>}
+        {entries.length ? <div className="plant-log-list">{entries.map((entry) => <article className="plant-log-row" key={entry.id}><div className="plant-log-point">{entry.point}</div><div className="plant-log-main"><strong>{entry.species} 种植物 · 覆盖率 {entry.coverage}%</strong><span data-no-translate="true">{entry.date}{entry.note ? ` · ${entry.note}` : ""}</span></div><button className="quiet-icon-button" type="button" aria-label={`删除 ${entry.point} 样方记录`} onClick={() => removeEntry(entry.id)}><Trash2 size={14} /></button></article>)}</div> : <div className="workspace-empty"><Leaf size={18} /><strong>还没有样方记录</strong><span>填写左侧表单即可开始记录；数据会保存在这台设备的浏览器中。</span></div>}
       </section>
     </div>
   );
@@ -288,6 +289,7 @@ function SensorChart({ readings, metric, rangeStart, rangeEnd, loading, failed, 
 }
 
 export default function Dashboard() {
+  const { language, setLanguage } = useLanguage();
   const [hours, setHours] = useState(24);
   const [metric, setMetric] = useState<MetricKey>("co2_ppm");
   const [location, setLocation] = useState("M1");
@@ -451,6 +453,7 @@ export default function Dashboard() {
           <div className="breadcrumb"><span>校园环境</span><span className="breadcrumb-slash">/</span><strong>{activeView === "overview" ? "环境概览" : activeView === "database" ? "数据档案" : activeView === "plants" ? "植物样方" : "点位地图"}</strong></div>
           <div className="top-actions">
             <span className="update-hint"><span className="pulse-dot" />每 15 秒更新</span>
+            <button className="language-toggle" type="button" onClick={() => setLanguage(language === "zh" ? "en" : "zh")} aria-label={language === "zh" ? "切换到英文" : "Switch to Chinese"} title={language === "zh" ? "切换到英文" : "Switch to Chinese"}>{language === "zh" ? "EN" : "中文"}</button>
             <button className={`connection-pill ${isOnline ? "connected" : ""}`} type="button" title="点击刷新当前点位握手状态和数据" onClick={() => { void refresh(true); void deviceStatus.refresh(); }}>
               {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
               <span>{deviceStatus.unavailable ? "状态未知" : isOnline ? "握手在线" : "未确认握手"}</span>

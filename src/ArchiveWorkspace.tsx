@@ -27,7 +27,7 @@ function parseSearch(input: string): { valid: boolean; label: string; matches: (
   if (!query) return { valid: true, label: "全部时间", matches: () => true };
   const today = minuteOf(Date.now()).slice(0, 10);
   const yesterday = minuteOf(Date.now() - 86400000).slice(0, 10);
-  const normalized = query.replace(/^今天/, today).replace(/^昨天/, yesterday).trim();
+  const normalized = query.replace(/^(今天|today)/i, today).replace(/^(昨天|yesterday)/i, yesterday).trim();
   const match = normalized.match(/^(?:(?:(\d{4})-)?(\d{1,2})-(\d{1,2}))?(?:\s*(\d{1,2}):(\d{2}))?$/);
   if (!match || !match.slice(1).some(Boolean)) return { valid: false, label: "输入 20:08、10-14 或 今天 20:08", matches: () => true };
   const [, year, month, day, hour, minute] = match;
