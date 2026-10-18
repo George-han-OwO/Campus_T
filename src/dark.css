@@ -14,6 +14,11 @@ body, .atlas-shell { color: #ededed; background: #191919; }
   -webkit-backdrop-filter: none;
 }
 .overview-view .page-content .glass-panel::before { content: none; }
+.overview-view .page-content { position: relative; isolation: isolate; }
+.overview-source-backplate { position: absolute; z-index: -1; top: clamp(92px, 12vw, 176px); right: clamp(14px, 5vw, 90px); display: grid; justify-items: end; gap: 8px; max-width: min(58vw, 700px); pointer-events: none; user-select: none; text-align: right; white-space: nowrap; }
+.overview-source-backplate > span { padding-top: 10px; color: #b4b4b4; border-top: 1px solid #ffffff24; font: 10px Consolas, "Microsoft YaHei", monospace; letter-spacing: .16em; }
+.overview-source-backplate > strong { color: #fff; font-size: clamp(150px, 22vw, 320px); font-weight: 750; letter-spacing: -.09em; line-height: .82; opacity: .035; }
+.overview-source-backplate > small { color: #b4b4b4; font: 11px Consolas, "Microsoft YaHei", monospace; letter-spacing: .1em; opacity: .72; }
 .page-heading-row h1, .hero-copy h2, .section-heading h2, .metric-value-row strong, .overview-tile > strong, .average-values strong, .chart-title-row strong, .placement-copy > strong, .device-dialog h2, .plant-log-main strong, .workspace-empty strong, .map-point-card h3, .device-info-card strong, .device-details strong, .breadcrumb strong, .chart-empty strong { color: #ededed; }
 .breadcrumb, .update-hint, .eyebrow, .section-kicker, .hero-kicker, .hero-meta, .page-heading-row p, .hero-copy p, .time-note, .metric-label, .metric-unit, .metric-status, .metric-note, .overview-label, .overview-caption, .average-values strong small, .average-values > div > span, .overview-tile > strong small, .chart-title-row > div span, .chart-sample-count, .chart-axis-labels, .anomaly-summary, .anomaly-method, .readings-note, .readings-table thead th, .readings-table tbody td small, .record-time, .placement-kicker, .placement-copy p, .placement-note, .device-dialog > p, .workspace-intro, .plant-form label, .plant-log-main span, .workspace-empty, .map-status, .map-status.active, .map-point-card p, .map-point-id, .pending-point-note, .device-info-card span, .device-details > div > span, .detail-state, .weak-network-note, .page-footer { color: #a1a1a1; }
 .location-button, .connection-pill, .connection-pill.connected, .icon-button, .record-badge, .metric-icon, .device-icon, .device-info-card, .status-chip, .status-chip.is-online, .plant-log-point, .map-point-card, .map-marker, .map-marker-dot, .plant-marker .map-marker-dot, .dialog-note { color: #ddd; border-color: #454545; background: #252525; }
@@ -65,6 +70,10 @@ body, .atlas-shell { color: #ededed; background: #191919; }
 .chart-range-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; margin: 12px 3px 0; color: #999; font: 10px "Consolas", "Microsoft YaHei", monospace; }
 .chart-range-status > span:last-child { color: #bdbdbd; }
 @media (max-width: 670px) {
+  .overview-source-backplate { top: 118px; right: 7px; }
+  .overview-source-backplate > span { font-size: 8px; letter-spacing: .08em; }
+  .overview-source-backplate > strong { font-size: clamp(112px, 33vw, 190px); }
+  .overview-source-backplate > small { font-size: 9px; }
   .chart-axis-labels > span:nth-child(2), .chart-axis-labels > span:nth-child(4) { display: none; }
   .chart-range-status { font-size: 9px; }
 }

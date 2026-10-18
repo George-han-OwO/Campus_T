@@ -471,6 +471,11 @@ export default function Dashboard() {
         </nav>
 
         <div className="page-content">
+          {activeView === "overview" ? <div className="overview-source-backplate" role="note" aria-label="当前环境数据来源教室">
+            <span>CURRENT DATA SOURCE / {location}</span>
+            <strong>{location === "M1" ? "M104" : selectedLocation.label}</strong>
+            <small>{selectedLocation.label}</small>
+          </div> : null}
           <div className="page-heading-row">
             <div>
               <div className="eyebrow"><span className="eyebrow-line" />{activeView === "overview" ? "LIVE ENVIRONMENT" : activeView === "database" ? "CHRONOLOGICAL ARCHIVE" : activeView === "plants" ? "FIELD OBSERVATION" : "CAMPUS POINTS"}</div>
