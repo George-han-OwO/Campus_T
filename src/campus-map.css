@@ -50,18 +50,23 @@
 .room-story-device > strong { color: #ddd; font-weight: 500; }
 .room-story-action { display: inline-flex; gap: 28px; align-items: center; justify-content: space-between; margin-top: 20px; padding: 12px 16px; color: #151515; background: #eee; border: 1px solid #eee; font-size: 12px; cursor: pointer; }
 .room-story-action:hover { background: #fff; }
-.room-story-chapters { position: absolute; z-index: 4; right: 24px; top: 44%; display: grid; gap: 16px; }
+.room-story-chapters { position: absolute; z-index: 4; right: 88px; top: 44%; display: grid; gap: 16px; }
 .room-story-chapters button { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 5px; background: none; color: #606060; border: 0; cursor: pointer; }
 .room-story-chapters span { opacity: 0; font: 9px Consolas, monospace; transition: opacity .2s; }
 .room-story-chapters i { display: block; width: 4px; height: 4px; background: #666; border-radius: 50%; transition: box-shadow .2s, background .2s; }
 .room-story-chapters button[aria-current] { color: #ddd; }
 .room-story-chapters button[aria-current] span, .room-story-chapters button:hover span { opacity: 1; }
 .room-story-chapters button[aria-current] i { background: #eee; box-shadow: 0 0 0 5px #ffffff12; }
+.room-side-arrow { position: absolute; z-index: 5; top: 50%; display: grid; place-items: center; width: 52px; height: 72px; padding: 0; transform: translateY(-50%); color: #eee; border: 1px solid #ffffff20; background: #11111130; backdrop-filter: blur(10px); cursor: pointer; transition: background .2s, border-color .2s; }
+.room-side-arrow--previous { left: 20px; }
+.room-side-arrow--next { right: 20px; }
+.room-side-arrow:hover { border-color: #ffffff70; background: #ffffff12; }
+.room-side-arrow:active svg { transform: scale(.9); }
 .room-journey-bottom { position: absolute; z-index: 5; bottom: 30px; left: 6%; right: 6%; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .room-switcher { display: flex; align-items: stretch; border: 1px solid #ffffff30; background: #11111155; backdrop-filter: blur(18px); }
 .room-switcher > button { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 48px; padding: 10px; border: 0; background: none; color: #ddd; cursor: pointer; transition: background .2s; }
 .room-switcher > button:hover { background: #ffffff12; }
-.room-switcher > .room-switcher-current { width: auto; gap: 16px; padding-inline: 18px; border-inline: 1px solid #ffffff20; }
+.room-switcher > .room-switcher-current { width: auto; gap: 16px; padding-inline: 18px; }
 .room-switcher-current span { font: 15px Consolas, monospace; }
 .room-switcher-current small { font-size: 10px; color: #999; }
 .room-scroll-cue { display: inline-flex; align-items: center; gap: 16px; color: #999; background: none; border: 0; font-size: 10px; letter-spacing: .12em; cursor: pointer; }
@@ -144,7 +149,7 @@
   .room-story-copy--hero { bottom: 118px; }
   .room-story-copy h1 { font-size: 56px; }
   .room-story-copy h2 { font-size: 43px; }
-  .room-story-chapters { right: 12px; }
+  .room-story-chapters { right: 70px; }
   .room-journey-bottom { left: 5%; right: 5%; }
   .room-story-facts strong { font-size: 29px; }
 }
@@ -186,7 +191,10 @@
   .room-switcher-current span { font-size: 13px; }
   .room-switcher-current small { display: none; }
   .room-scroll-cue { gap: 7px; font-size: 9px; letter-spacing: 0; padding: 0; }
-  .room-story-chapters { top: 30%; gap: 10px; right: 12px; }
+  .room-story-chapters { top: 14%; gap: 10px; right: 22px; }
+  .room-side-arrow { top: 31%; width: 40px; height: 56px; }
+  .room-side-arrow--previous { left: 12px; }
+  .room-side-arrow--next { right: 12px; }
   .room-story-chapters span { display: none; }
   .campus-3d-stage { height: calc(100svh - var(--map-sticky-top) - 64px); min-height: 460px; }
   .campus-model-help { display: none; }
@@ -222,6 +230,10 @@
 }
 /* Use the actual scene width, which also accounts for the fixed navigation rail. */
 @container spatial-scene (max-width: 700px) {
+  .room-side-arrow { top: 31%; width: 40px; height: 56px; }
+  .room-side-arrow--previous { left: 12px; }
+  .room-side-arrow--next { right: 12px; }
+  .room-story-chapters { top: 14%; gap: 10px; right: 22px; }
   .room-story-copy, .room-story-copy--hero, .room-story-copy--shape, .room-story-copy--data { top: auto; bottom: 98px; left: 24px; right: 32px; width: auto; max-width: none; }
   .room-story-copy h1, .room-story-copy h2 { margin: 12px 0; font-size: clamp(38px, 7cqw, 49px); line-height: 1.03; }
   .room-story-copy h2 br { display: none; }

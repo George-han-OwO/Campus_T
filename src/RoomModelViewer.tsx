@@ -109,7 +109,7 @@ type Props = {
   handshakeLabel: string;
   canOpenData: boolean;
 };
-type ModelEntry = { holder: THREE.Group; arrival: number; velocity: number; leaving: boolean; age: number };
+type ModelEntry = { holder: THREE.Group; arrival: number; target: number; velocity: number; leaving: boolean; age: number };
 
 const chapters = ["空间开场", "教室轮廓", "现场观测"];
 const clamp = THREE.MathUtils.clamp;
@@ -123,6 +123,7 @@ export default function RoomModelViewer({ roomId, onSelectRoom, onChooseRoom, on
   const ghost = useRef<HTMLDivElement>(null);
   const meter = useRef<HTMLSpanElement>(null);
   const requestedRoom = useRef(roomId);
+  const switchDirection = useRef(0);
   const switchRoom = useRef<(id: string, initial?: boolean) => void>(() => {});
   const jumpTo = useRef<(chapter: number) => void>(() => {});
   const [chapter, setChapter] = useState(0);
@@ -132,7 +133,10 @@ export default function RoomModelViewer({ roomId, onSelectRoom, onChooseRoom, on
   requestedRoom.current = roomId;
   const room = roomById.get(roomId) ?? rooms[0];
   const roomIndex = Math.max(0, rooms.findIndex(item => item.id === roomId));
-  const stepRoom = (offset: number) => onSelectRoom(rooms[(roomIndex + offset + rooms.length) % rooms.length].id);
+  const stepRoom = (offset: number) => {
+    switchDirection.current = Math.sign(offset);
+    onSelectRoom(rooms[(roomIndex + offset + rooms.length) % rooms.length].id);
+  };
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -175,13 +179,23 @@ export default function RoomModelViewer({ roomId, onSelectRoom, onChooseRoom, on
       if (id === activeId) return;
       const next = roomById.get(id) ?? roomById.get("M104") ?? rooms[0];
       if (!next) return;
-      entries.forEach(entry => { entry.leaving = true; entry.velocity = 0; entry.age = 0; });
+      const previousIndex = rooms.findIndex(item => item.id === activeId);
+      const nextIndex = rooms.findIndex(item => item.id === next.id);
+      const forward = (nextIndex - previousIndex + rooms.length) % rooms.length;
+      const direction = switchDirection.current || (forward <= rooms.length / 2 ? 1 : -1);
+      switchDirection.current = 0;
+      // Bound resources during rapid clicks and keep the current model's velocity.
+      entries = entries.filter(entry => {
+        if (!entry.leaving) return true;
+        rig.remove(entry.holder); disposeObject(entry.holder); return false;
+      });
+      entries.forEach(entry => { entry.leaving = true; entry.target = -direction * 19; entry.age = 0; });
       const model = buildRoom(next);
       model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
       const holder = new THREE.Group();
       holder.add(model);
       rig.add(holder);
-      const entry = { holder, arrival: initial || reducedMotion ? 0 : 4.5, velocity: 0, leaving: false, age: 0 };
+      const entry = { holder, arrival: initial || reducedMotion ? 0 : direction * 19, target: 0, velocity: 0, leaving: false, age: 0 };
       entries.push(entry);
       activeId = next.id;
       setState("ready");
@@ -246,6 +260,7 @@ export default function RoomModelViewer({ roomId, onSelectRoom, onChooseRoom, on
     renderer.domElement.addEventListener("pointercancel", pointerUp);
     renderer.domElement.addEventListener("webglcontextlost", contextLost);
 
+    const inverseRigRotation = new THREE.Quaternion();
     const animate = (time: number) => {
       const dt = Math.min(lastTime ? (time - lastTime) / 1000 : .016, .04);
       lastTime = time;
@@ -270,21 +285,18 @@ export default function RoomModelViewer({ roomId, onSelectRoom, onChooseRoom, on
       rig.position.set(x, (compact ? height < 460 ? 4.2 : 3.2 : .35) + breathe, 0);
       rig.rotation.set(tilt + (reducedMotion ? 0 : pointerY * .12), (reducedMotion ? -.55 : yaw + elapsed * .035 + pointerX * .16) + dragYaw, reducedMotion ? 0 : Math.sin(progress * Math.PI * 2) * .065);
       rig.scale.setScalar(reducedMotion ? .94 : scale);
+      inverseRigRotation.copy(rig.quaternion).invert();
       entries = entries.filter(entry => {
         entry.age += dt;
+        entry.velocity += ((entry.target - entry.arrival) * 58 - entry.velocity * 15) * dt;
+        entry.arrival += entry.velocity * dt;
+        if (reducedMotion) entry.arrival = entry.target;
+        // Cancel the presentation rotation for the slide offset: left/right stays
+        // horizontal on screen at every chapter and at every dragged model angle.
+        entry.holder.position.set(entry.arrival / rig.scale.x, 0, 0).applyQuaternion(inverseRigRotation);
         if (entry.leaving) {
-          entry.velocity += 15 * dt;
-          entry.arrival -= entry.velocity * dt;
-          entry.holder.position.set(0, entry.arrival, -entry.age * 2);
-          entry.holder.scale.setScalar(Math.max(.1, 1 - entry.age * .4));
-          setEmphasis(entry.holder, Math.max(0, 1 - entry.age * 1.5));
-          if (reducedMotion || entry.age > .8) { rig.remove(entry.holder); disposeObject(entry.holder); return false; }
-        } else {
-          entry.velocity += (-entry.arrival * 58 - entry.velocity * 15) * dt;
-          entry.arrival += entry.velocity * dt;
-          if (reducedMotion) entry.arrival = 0;
-          entry.holder.position.y = entry.arrival;
-          entry.holder.scale.setScalar(1 - Math.min(.2, Math.abs(entry.arrival) * .035));
+          setEmphasis(entry.holder, Math.max(0, 1 - entry.age / .65));
+          if (reducedMotion || entry.age > .85) { rig.remove(entry.holder); disposeObject(entry.holder); return false; }
         }
         return true;
       });
@@ -348,11 +360,11 @@ export default function RoomModelViewer({ roomId, onSelectRoom, onChooseRoom, on
       <nav className="room-story-chapters" aria-label="展示章节">
         {chapters.map((label, index) => <button type="button" key={label} aria-label={label} aria-current={chapter === index ? "step" : undefined} onClick={() => jumpTo.current(index)}><span>{String(index + 1).padStart(2, "0")}</span><i /></button>)}
       </nav>
+      <button className="room-side-arrow room-side-arrow--previous" type="button" aria-label="上一个教室" title="上一个教室" onClick={() => stepRoom(-1)}><ChevronLeft size={30} /></button>
+      <button className="room-side-arrow room-side-arrow--next" type="button" aria-label="下一个教室" title="下一个教室" onClick={() => stepRoom(1)}><ChevronRight size={30} /></button>
       <div className="room-journey-bottom">
         <div className="room-switcher" aria-label="切换教室">
-          <button type="button" aria-label="上一个教室" onClick={() => stepRoom(-1)}><ChevronLeft size={20} /></button>
           <button type="button" className="room-switcher-current" onClick={onChooseRoom}><span>{roomId}</span><small>切换空间</small><Search size={14} /></button>
-          <button type="button" aria-label="下一个教室" onClick={() => stepRoom(1)}><ChevronRight size={20} /></button>
         </div>
         <button className="room-scroll-cue" type="button" onClick={() => jumpTo.current(chapter === 2 ? 0 : chapter + 1)}><span>{chapter === 2 ? "返回开场" : "向下滚动探索"}</span><ArrowDown size={15} /></button>
       </div>
