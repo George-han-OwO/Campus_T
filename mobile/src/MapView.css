@@ -1,0 +1,200 @@
+.atlas-map.map-stage {
+  background: radial-gradient(
+    ellipse at 68% 25%,
+    #fbfcf8 0%,
+    #f1f5f4 45%,
+    #e8eff0 100%
+  );
+}
+.atlas-map .map-svg {
+  -webkit-user-select: none;
+  user-select: none;
+  outline-offset: -4px;
+}
+.atlas-map .map-svg.is-dragging {
+  cursor: grabbing;
+}
+.atlas-map .map-ground rect {
+  fill: #dce6e44f;
+  stroke: #cad6d159;
+  stroke-width: 0.25;
+}
+.atlas-map .map-ground text {
+  font-size: 1.8px;
+  fill: #9bacae;
+  letter-spacing: 0.45px;
+  font-weight: 600;
+}
+.atlas-map .room-shape {
+  cursor: pointer;
+  outline: none;
+}
+.atlas-map .room-shape > path {
+  transition:
+    fill 0.16s,
+    stroke 0.16s;
+}
+.atlas-map .room-shape:hover:not(.selected) > path {
+  stroke: #7899c3;
+  fill: #f1f6fd;
+}
+.atlas-map .room-shape:focus-visible > path {
+  stroke: #173f8e;
+  stroke-width: 0.85;
+}
+.atlas-map .room-shape.selected > path {
+  fill: #d9e7ff;
+  stroke: #3268f4;
+  stroke-width: 0.55;
+}
+.atlas-map .room-shape.start-room:not(.selected) > path {
+  fill: #edf4ff;
+  stroke: #8eadd8;
+}
+.atlas-map .room-label {
+  fill: #667b88;
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-weight: 650;
+  paint-order: stroke;
+  stroke: #ffffffa8;
+  stroke-width: 0.26px;
+  stroke-linejoin: round;
+}
+.atlas-map .room-shape.selected .room-label {
+  fill: #265ed5;
+  stroke: #e6efffb0;
+  font-weight: 800;
+}
+.atlas-map .origin-label {
+  pointer-events: none;
+}
+.atlas-map .origin-label rect {
+  fill: #fff;
+  stroke: #dce5ef;
+  stroke-width: 1;
+}
+.atlas-map .origin-label text {
+  fill: #3467b7;
+  text-anchor: middle;
+  font-size: 10px;
+  font-weight: 700;
+}
+.atlas-map .map-caption {
+  gap: 7px;
+}
+.atlas-map .floor-pill {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 9px 11px;
+  color: #415b6b;
+  border-color: #fff;
+  box-shadow: 0 3px 15px #23415108;
+  background: #ffffffed;
+  backdrop-filter: blur(10px);
+}
+.atlas-map .floor-pill b {
+  margin-left: 3px;
+}
+.atlas-map .floor-pill > svg {
+  color: #7d95ab;
+}
+.atlas-map .map-caption > span:last-child {
+  font-size: 9px;
+  color: #748b95;
+  text-shadow: 0 1px 3px #fff;
+}
+.atlas-map .map-tools {
+  gap: 10px;
+  right: 24px;
+}
+.atlas-map .map-tools > button,
+.atlas-map .zoom-group {
+  position: relative;
+  border-radius: 15px;
+  background: #ffffffed;
+  border: 1px solid #fff;
+  box-shadow: 0 5px 22px #254c6010;
+  backdrop-filter: blur(12px);
+}
+.atlas-map .map-tools button {
+  width: 46px;
+  height: 46px;
+  color: #476276;
+}
+.atlas-map .map-tools button:active {
+  background: #edf3ff;
+  color: #3268f4;
+}
+.atlas-map .map-tools button:disabled {
+  opacity: 0.3;
+}
+.atlas-map .map-footer {
+  position: absolute;
+  right: 24px;
+  left: 26px;
+  bottom: calc(var(--map-bottom-inset, 110px) - 7px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  pointer-events: none;
+}
+.atlas-map .map-scale {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  color: #81949e;
+}
+.atlas-map .map-scale > span {
+  display: block;
+  border: solid currentColor;
+  border-width: 0 1px 2px;
+  height: 5px;
+}
+.atlas-map .map-scale > small {
+  font-size: 8px;
+  white-space: nowrap;
+}
+.atlas-map .map-attribution {
+  position: static;
+  color: #82949c;
+  font-size: 8px;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 3px #fff;
+}
+@media (min-width: 850px) {
+  .atlas-map .map-footer {
+    left: auto;
+    width: 300px;
+    right: 35px;
+    bottom: 30px;
+  }
+  .atlas-map .map-tools {
+    right: 30px;
+    top: 36%;
+  }
+}
+@media (max-width: 600px) {
+  .atlas-map .map-tools {
+    right: 15px;
+    top: calc(207px + var(--safe-top));
+  }
+  .atlas-map .map-caption {
+    left: 20px;
+    top: calc(174px + var(--safe-top));
+  }
+  .atlas-map .map-footer {
+    left: 20px;
+    right: 17px;
+    gap: 12px;
+  }
+  .atlas-map .map-attribution {
+    font-size: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas-map .room-shape > path {
+    transition: none;
+  }
+}

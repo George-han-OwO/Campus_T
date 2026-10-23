@@ -1,12 +1,12 @@
 {
   "name": "campus-atlas-go",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5174 --strictPort",
     "build": "tsc --noEmit && vite build",
-    "test": "tsx --test src/navigation.test.ts",
+    "test": "tsx --test src/*.test.ts",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android"
   },

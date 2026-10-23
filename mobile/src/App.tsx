@@ -14,6 +14,11 @@ import {
   Headphones,
   Layers2,
   MapPin,
+  CircleUserRound,
+  Clock3,
+  ListOrdered,
+  CircleHelp,
+  WifiOff,
   MoreHorizontal,
   Navigation2,
   Pencil,
@@ -47,12 +52,27 @@ import { speak, stopVoice } from "./voice";
 import type { Media } from "./Panorama";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App as NativeApp } from "@capacitor/app";
+import {
+  APP_VERSION,
+  ArrivalDialog,
+  Dialog,
+  HelpDialog,
+  PersonalCenter,
+  RouteOverview,
+} from "./ProductPanels";
+import {
+  clearJourneys,
+  estimatedMinutes,
+  loadJourneys,
+  recordJourney,
+  type Journey,
+} from "./journeys";
 const NativeFiles = registerPlugin<{
   saveRoutes(options: { json: string }): Promise<{ saved: boolean }>;
 }>("NavigationFiles");
 const Panorama = lazy(() => import("./Panorama"));
 const STORAGE = "atlas-go-routes-v1";
-type Tab = "map" | "route" | "pano";
+type Tab = "map" | "route" | "pano" | "library";
 function routeStore() {
   const data = loadStored<unknown>(STORAGE, []);
   return Array.isArray(data) ? data.filter(isRoute) : [];
@@ -101,7 +121,10 @@ function TurnIcon({ turn, size = 26 }: { turn?: string; size?: number }) {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("map");
-  const [from, setFrom] = useState("M104"),
+  const [from, setFrom] = useState(() => {
+      const id = loadStored<string>("atlas-go-start", "M104");
+      return rooms.some((r) => r.id === id) ? id : "M104";
+    }),
     [to, setTo] = useState<string | null>(null);
   const [searching, setSearching] = useState<"from" | "to" | null>(null),
     [query, setQuery] = useState("");
@@ -109,6 +132,17 @@ export default function App() {
     readIds("atlas-go-favourites"),
   );
   const [recent, setRecent] = useState(() => readIds("atlas-go-recent"));
+  const [journeys, setJourneys] = useState(loadJourneys);
+  const [arrival, setArrival] = useState<Journey | null>(null);
+  const [overview, setOverview] = useState(false);
+  const [help, setHelp] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{
+    kind: "route" | "history";
+    id?: string;
+  } | null>(null);
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const lastBack = useRef(0);
+  const searchOrigin = useRef<Tab>("map");
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>(routeStore);
   const [planned, setPlanned] = useState<Point[]>([]),
     [planning, setPlanning] = useState(false);
@@ -118,7 +152,9 @@ export default function App() {
   const [voice, setVoice] = useState(
     () => loadStored("atlas-go-voice", true) === true,
   );
-  const [labels, setLabels] = useState(true),
+  const [labels, setLabels] = useState(
+      () => loadStored("atlas-go-labels", true) === true,
+    ),
     [filter, setFilter] = useState("全部");
   const [settings, setSettings] = useState(false),
     [fitVersion, setFitVersion] = useState(0);
@@ -140,7 +176,11 @@ export default function App() {
   handleBack.current = () => {
     const event = new Event("atlas-native-back", { cancelable: true });
     if (!document.dispatchEvent(event)) return;
-    if (searching) setSearching(null);
+    if (pendingDelete) setPendingDelete(null);
+    else if (help) setHelp(false);
+    else if (arrival) setArrival(null);
+    else if (overview) setOverview(false);
+    else if (searching) setSearching(null);
     else if (settings) setSettings(false);
     else if (editing) setEditing(false);
     else if (navigating) {
@@ -149,7 +189,13 @@ export default function App() {
       stopVoice();
     } else if (tab !== "map") setTab("map");
     else if (to) setTo(null);
-    else if (Capacitor.isNativePlatform()) void NativeApp.exitApp();
+    else if (Capacitor.isNativePlatform()) {
+      if (Date.now() - lastBack.current < 2000) void NativeApp.exitApp();
+      else {
+        lastBack.current = Date.now();
+        notice("再按一次返回退出 Atlas Go");
+      }
+    }
   };
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -197,7 +243,10 @@ export default function App() {
     let active = true;
     setPlanning(true);
     const timer = setTimeout(() => {
-      const path = planPreview(startRoom, rooms.find((r) => r.id === to)!);
+      const path = planPreview(
+        startRoom,
+        rooms.find((r) => r.id === to)!,
+      );
       if (active) {
         setPlanned(path ?? []);
         setPlanning(false);
@@ -213,11 +262,26 @@ export default function App() {
     if (searching) searchInput.current?.focus();
   }, [searching]);
   useEffect(() => {
+    store("atlas-go-start", from);
+  }, [from]);
+  useEffect(() => {
+    store("atlas-go-labels", labels);
+  }, [labels]);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  useEffect(() => {
     store("atlas-go-voice", voice);
     if (!voice) stopVoice();
   }, [voice]);
   useEffect(() => {
-    if (navigating && voice && tab !== "pano" && steps[step])
+    if (navigating && voice && tab === "route" && steps[step])
       void speak(
         `${!isVerified && step === 0 ? "路线预演。" : ""}${steps[step].text}。请在实际到达后手动确认位置。`,
       ).catch((error) => notice(error.message));
@@ -271,7 +335,7 @@ export default function App() {
     if (searching === "from") setFrom(id);
     else {
       setTo(id);
-      setTab("map");
+      setTab(searchOrigin.current === "route" ? "route" : "map");
       setRecent((items) => {
         const next = [id, ...items.filter((item) => item !== id)].slice(0, 8);
         store("atlas-go-recent", next);
@@ -282,20 +346,27 @@ export default function App() {
     setQuery("");
   };
   const openSearch = (target: "from" | "to") => {
+    searchOrigin.current = tab;
     setSearching(target);
     setQuery("");
   };
-  const favourite = (id: string) =>
-    setFavourites((items) => {
-      const next = items.includes(id)
-        ? items.filter((item) => item !== id)
-        : [...items, id];
-      store("atlas-go-favourites", next);
-      return next;
-    });
+  const favourite = (id: string) => {
+    const next = favourites.includes(id)
+      ? favourites.filter((item) => item !== id)
+      : [...favourites, id];
+    if (!store("atlas-go-favourites", next)) {
+      notice("收藏未保存，请检查设备存储空间");
+      return;
+    }
+    setFavourites(next);
+  };
   const saveRoutes = (next: SavedRoute[]) => {
+    if (!store(STORAGE, next)) {
+      notice("路线没有保存成功，请检查设备存储空间");
+      return false;
+    }
     setSavedRoutes(next);
-    if (!store(STORAGE, next)) notice("路线没有保存成功，请检查设备存储空间");
+    return true;
   };
   const finishEditing = () => {
     if (!to || draft.length < 2) return;
@@ -311,16 +382,19 @@ export default function App() {
       notice("路线点位无效，请在地图范围内至少标记两个点");
       return;
     }
-    saveRoutes([
-      ...savedRoutes.filter(
-        (r) =>
-          !(
-            (r.from === from && r.to === to) ||
-            (r.from === to && r.to === from)
-          ),
-      ),
-      route,
-    ]);
+    if (
+      !saveRoutes([
+        ...savedRoutes.filter(
+          (r) =>
+            !(
+              (r.from === from && r.to === to) ||
+              (r.from === to && r.to === from)
+            ),
+        ),
+        route,
+      ])
+    )
+      return;
     setEditing(false);
     setTab("route");
     notice(
@@ -339,7 +413,7 @@ export default function App() {
         !data.routes.every(isRoute)
       )
         throw new Error();
-      saveRoutes([
+      const imported = saveRoutes([
         ...savedRoutes.filter(
           (r) =>
             !data.routes.some(
@@ -352,6 +426,7 @@ export default function App() {
           updatedAt: new Date().toISOString(),
         })),
       ]);
+      if (!imported) return;
       notice(`已导入 ${data.routes.length} 条路线，需在本机重新核验`);
     } catch {
       notice("文件格式无效，请导入 Atlas Go 导出的路线 JSON");
@@ -369,19 +444,58 @@ export default function App() {
       setNavigating(false);
       setAuto(false);
       stopVoice();
-      notice("本次引导已结束");
+      try {
+        const result = recordJourney({
+          from,
+          to: to!,
+          distance: length,
+          stepCount: steps.length,
+          mode: isVerified ? "confirmed" : "preview",
+        });
+        setJourneys(result.history);
+        setArrival(result.journey);
+      } catch {
+        notice("引导已结束，但记录未保存，请检查设备存储空间");
+      }
     } else setStep((v) => v + 1);
   };
-  const searchResults = rooms.filter((r) =>
-    `${r.id} ${r.name} ${r.kindLabel}`
-      .toLowerCase()
-      .includes(query.trim().toLowerCase()),
-  );
+  const searchTerm = query.trim().toLowerCase();
+  const searchResults = rooms
+    .filter((r) =>
+      searchTerm
+        .split(/\s+/)
+        .every((word) =>
+          `${r.id} ${r.name} ${r.kindLabel}`.toLowerCase().includes(word),
+        ),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.id.toLowerCase() === searchTerm) -
+          Number(a.id.toLowerCase() === searchTerm) ||
+        Number(b.id.toLowerCase().startsWith(searchTerm)) -
+          Number(a.id.toLowerCase().startsWith(searchTerm)),
+    );
+  const chooseDestination = (id: string) => {
+    setTo(id);
+    setTab("map");
+    setRecent((items) => {
+      const next = [id, ...items.filter((v) => v !== id)].slice(0, 8);
+      store("atlas-go-recent", next);
+      return next;
+    });
+  };
+  const useRoute = (start: string, end: string) => {
+    setFrom(start);
+    setTo(end);
+    setTab("route");
+    setSettings(false);
+    setFitVersion((v) => v + 1);
+  };
   return (
     <div
       className={`app ${tab === "pano" ? "pano-mode" : ""} ${editing ? "editing-mode" : ""}`}
     >
-      {tab !== "pano" ? (
+      {tab === "map" || tab === "route" ? (
         <MapView
           selected={to}
           start={from}
@@ -397,7 +511,7 @@ export default function App() {
           filter={filter}
           fitVersion={fitVersion}
         />
-      ) : (
+      ) : tab === "pano" ? (
         <Suspense
           fallback={<div className="loading-screen">正在准备全景播放器…</div>}
         >
@@ -406,23 +520,38 @@ export default function App() {
             onMedia={chooseMedia}
             steps={steps}
             routeKey={`${from}:${to ?? "none"}`}
-            onCue={(index, text) => {
-              if (index >= 0 && index < steps.length) setStep(index);
+            onCue={(_index, text) => {
+              // A video timestamp is a cue, never confirmation of physical arrival.
               if (voice)
                 void speak(text).catch((error) => notice(error.message));
             }}
             notice={notice}
           />
         </Suspense>
+      ) : (
+        <PersonalCenter
+          favourites={favourites}
+          journeys={journeys}
+          routes={savedRoutes}
+          onChoose={chooseDestination}
+          onFavourite={favourite}
+          onRoute={useRoute}
+          onDeleteRoute={(id) => setPendingDelete({ kind: "route", id })}
+          onClearHistory={() => setPendingDelete({ kind: "history" })}
+          onSettings={() => setSettings(true)}
+          onHelp={() => setHelp(true)}
+        />
       )}
 
-      {!editing && (
+      {!editing && tab !== "library" && (
         <header className="app-header">
           <div className="brand-line">
             <span>
               <span className="brand-symbol">↗</span> ATLAS <b>GO</b>
             </span>
-            <span className="brand-detail">CAMPUS NAVIGATION</span>
+            <span className="brand-detail">
+              <span className="brand-status" /> FF–01 · 校园随行
+            </span>
           </div>
           <div className="search-row">
             <button className="search-launch" onClick={() => openSearch("to")}>
@@ -430,7 +559,7 @@ export default function App() {
               <span>
                 {room ? `${room.id} · ${room.name}` : "想去哪个教室？"}
               </span>
-              <kbd>搜索</kbd>
+              <kbd>{rooms.length} 空间</kbd>
             </button>
             <button
               className="header-action"
@@ -440,6 +569,11 @@ export default function App() {
               <Settings2 size={22} />
             </button>
           </div>
+          {!online && (
+            <div className="offline-notice">
+              <WifiOff size={13} /> 当前离线，地图与本地路线仍可使用
+            </div>
+          )}
           {tab === "map" && (
             <div className="category-row">
               {["全部", "教室", "阅读", "餐厅"].map((category) => (
@@ -464,7 +598,7 @@ export default function App() {
         </header>
       )}
 
-      {tab !== "pano" && !editing && (
+      {(tab === "map" || tab === "route") && !editing && (
         <section
           className={`bottom-sheet ${tab === "route" ? "route-sheet" : ""} ${navigating ? "navigation-sheet" : ""}`}
         >
@@ -474,7 +608,9 @@ export default function App() {
               <>
                 <div className="place-heading">
                   <div>
-                    <span className="eyebrow">YOUR NEXT STOP</span>
+                    <span className="eyebrow">
+                      YOUR NEXT STOP / 下一个目的地
+                    </span>
                     <h1>
                       {room.id}
                       <small>{room.name}</small>
@@ -531,22 +667,27 @@ export default function App() {
               <>
                 <div className="home-heading">
                   <div>
-                    <span className="eyebrow">A LITTLE CLOSER.</span>
-                    <h1>校园，不再绕路。</h1>
+                    <span className="eyebrow">
+                      A LITTLE CLOSER. / 每一步，更熟悉
+                    </span>
+                    <h1>下一站，去哪里？</h1>
                   </div>
                   <span className="home-icon">
                     <Navigation2 size={27} />
                   </span>
                 </div>
                 <p className="home-description">
-                  找到教室，沿着熟悉的方向出发。
+                  找到熟悉的教室，也发现新的角落。
                 </p>
                 <div className="home-stats">
                   <span>
                     <b>{rooms.length}</b>个空间
                   </span>
                   <span>
-                    <b>2D + 360°</b>双视角
+                    <b>
+                      <WifiOff size={13} /> 离线
+                    </b>
+                    校园地图
                   </span>
                   <button onClick={() => openSearch("from")}>
                     <i />
@@ -558,13 +699,26 @@ export default function App() {
                   {[...new Set([...favourites, "M104", "A101", "THEATER-01"])]
                     .slice(0, 3)
                     .map((id) => (
-                      <button key={id} onClick={() => setTo(id)}>
+                      <button key={id} onClick={() => chooseDestination(id)}>
                         <MapPin size={15} />
                         <span>{id}</span>
                         <ChevronRight size={13} />
                       </button>
                     ))}
                 </div>
+                <button
+                  className="home-pano-card"
+                  onClick={() => setTab("pano")}
+                >
+                  <span className="pano-card-icon">
+                    <Film size={21} />
+                  </span>
+                  <span>
+                    <strong>360° 实景，一眼认路</strong>
+                    <small>导入校园全景，提前熟悉每一个转角</small>
+                  </span>
+                  <ArrowRight size={18} />
+                </button>
               </>
             )
           ) : navigating ? (
@@ -604,6 +758,16 @@ export default function App() {
                   <small> / {steps.length} 步</small>
                 </strong>
               </div>
+              <button
+                className="route-overview-launch"
+                onClick={() => {
+                  setAuto(false);
+                  setOverview(true);
+                }}
+              >
+                <ListOrdered size={16} /> 查看全部引导点{" "}
+                <ChevronRight size={15} />
+              </button>
               <p className="tiny-note">
                 未连接室内定位，请核对周围环境后确认下一点。
               </p>
@@ -638,6 +802,7 @@ export default function App() {
                 <h2>步行路线</h2>
                 <button
                   className="subtle-button"
+                  aria-label="关闭路线规划"
                   onClick={() => {
                     setTo(null);
                     setTab("map");
@@ -685,7 +850,10 @@ export default function App() {
                         {Math.round(length)}
                         <small>图纸米</small>
                       </strong>
-                      <span>{steps.length} 个引导点 · 实际距离待复核</span>
+                      <span>
+                        约 {estimatedMinutes(length)} 分钟 · {steps.length}{" "}
+                        个引导点 · 按图纸估算
+                      </span>
                     </div>
                     <span
                       className={`validation-tag ${isVerified ? "verified" : ""}`}
@@ -703,6 +871,13 @@ export default function App() {
                       ? "使用本机保存的现场标注路线，位置由你逐步确认。"
                       : "由房间轮廓生成；门口、走廊连通与室外边界尚未核验，仅供预演。"}
                   </p>
+                  <button
+                    className="route-overview-launch"
+                    onClick={() => setOverview(true)}
+                  >
+                    <ListOrdered size={16} /> 路线总览{" "}
+                    <ChevronRight size={15} />
+                  </button>
                   <div className="route-buttons">
                     <button
                       className="button secondary"
@@ -730,6 +905,20 @@ export default function App() {
                         ? "起点和终点是同一个空间"
                         : "尚未找到可连通的示意路径"}
                   </p>
+                  {!to && (
+                    <div className="route-suggestions">
+                      {[...new Set([...favourites, ...recent, "M104", "A101"])]
+                        .filter((id) => id !== from)
+                        .slice(0, 3)
+                        .map((id) => (
+                          <button key={id} onClick={() => setTo(id)}>
+                            <MapPin size={14} />
+                            {id}
+                            <ChevronRight size={13} />
+                          </button>
+                        ))}
+                    </div>
+                  )}
                   {to && from !== to && (
                     <button
                       className="button primary"
@@ -804,6 +993,7 @@ export default function App() {
         <nav className="bottom-nav" aria-label="主导航">
           <button
             className={tab === "map" ? "active" : ""}
+            aria-current={tab === "map" ? "page" : undefined}
             onClick={() => setTab("map")}
           >
             <Compass size={23} />
@@ -811,6 +1001,7 @@ export default function App() {
           </button>
           <button
             className={tab === "route" ? "active" : ""}
+            aria-current={tab === "route" ? "page" : undefined}
             onClick={() => {
               setTab("route");
               setFitVersion((v) => v + 1);
@@ -821,11 +1012,20 @@ export default function App() {
           </button>
           <button
             className={tab === "pano" ? "active" : ""}
+            aria-current={tab === "pano" ? "page" : undefined}
             onClick={() => setTab("pano")}
           >
             <Film size={23} />
             <span>全景导航</span>
             <b>360°</b>
+          </button>
+          <button
+            className={tab === "library" ? "active" : ""}
+            onClick={() => setTab("library")}
+            aria-current={tab === "library" ? "page" : undefined}
+          >
+            <CircleUserRound size={23} />
+            <span>我的</span>
           </button>
         </nav>
       )}
@@ -840,6 +1040,12 @@ export default function App() {
               <Search size={19} />
               <input
                 ref={searchInput}
+                aria-label={searching === "from" ? "搜索起点" : "搜索目的地"}
+                enterKeyHint="search"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && searchResults.length)
+                    pick(searchResults[0].id);
+                }}
                 placeholder={
                   searching === "from"
                     ? "搜索起点教室或空间名称"
@@ -855,6 +1061,22 @@ export default function App() {
               )}
             </div>
           </header>
+          <p className="search-context">
+            <span
+              className={`endpoint-dot ${searching === "from" ? "start" : "end"}`}
+            />
+            {searching === "from" ? "选择出发位置" : "选择你想去的地方"}
+            <span>FF–01</span>
+          </p>
+          {!query && (
+            <div className="search-chips search-categories">
+              {["教室", "图书", "餐厅", "卫生间", "楼梯"].map((text) => (
+                <button key={text} onClick={() => setQuery(text)}>
+                  {text}
+                </button>
+              ))}
+            </div>
+          )}
           {!query && (
             <>
               <div className="search-section-title">
@@ -923,121 +1145,223 @@ export default function App() {
       )}
 
       {settings && (
-        <div className="modal-backdrop">
-          <section
-            className="modal settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="设置与路线资料"
+        <Dialog
+          title="导航偏好与资料"
+          label="MAKE IT YOUR WAY"
+          onClose={() => setSettings(false)}
+          className="settings-modal"
+        >
+          <p className="dialog-description">
+            选择适合你的引导方式，管理此设备的离线资料。
+          </p>
+          <div className="setting-row">
+            <span>
+              <Volume2 size={20} />
+              中文语音引导
+            </span>
+            <button
+              className={`switch ${voice ? "on" : ""}`}
+              role="switch"
+              aria-label="中文语音引导"
+              aria-checked={voice}
+              onClick={() => setVoice((v) => !v)}
+            >
+              <i />
+            </button>
+          </div>
+          <button
+            className="setting-link"
+            onClick={() =>
+              void speak(
+                "欢迎使用 Atlas Go 校园导航。向前出发，找到你的下一间教室。",
+              ).catch((error) => notice(error.message))
+            }
           >
+            <Headphones size={19} />
+            试听中文语音
+            <ChevronRight size={16} />
+          </button>
+          <p className="tiny-note">
+            安卓使用系统文字转语音引擎；缺少中文语音包时请先在系统中安装。
+          </p>
+          <div className="setting-row">
+            <span>
+              <Layers2 size={20} /> 显示地图教室编号
+            </span>
             <button
-              className="close-button"
-              aria-label="关闭设置"
-              onClick={() => setSettings(false)}
+              className={`switch ${labels ? "on" : ""}`}
+              role="switch"
+              aria-label="显示地图教室编号"
+              aria-checked={labels}
+              onClick={() => setLabels((v) => !v)}
             >
-              <X size={21} />
+              <i />
             </button>
-            <span className="eyebrow">MAKE IT YOUR WAY</span>
-            <h2>导航偏好与资料</h2>
-            <div className="setting-row">
-              <span>
-                <Volume2 size={20} />
-                中文语音引导
-              </span>
-              <button
-                className={`switch ${voice ? "on" : ""}`}
-                role="switch"
-                aria-label="中文语音引导"
-                aria-checked={voice}
-                onClick={() => setVoice((v) => !v)}
-              >
-                <i />
-              </button>
-            </div>
+          </div>
+          <button
+            className="setting-link"
+            onClick={() => {
+              setSettings(false);
+              openSearch("from");
+            }}
+          >
+            <MapPin size={19} /> 默认出发位置 <strong>{from}</strong>
+            <ChevronRight size={16} />
+          </button>
+          <div className="settings-heading">
+            现场路线 <span>{savedRoutes.length} 条</span>
+          </div>
+          <div className="saved-routes">
+            {savedRoutes.map((r) => (
+              <article key={r.id}>
+                <button
+                  className="saved-route-open"
+                  onClick={() => useRoute(r.from, r.to)}
+                >
+                  <strong>
+                    {r.from} → {r.to}
+                  </strong>
+                  <small>
+                    {r.verified ? "本机已标注核验" : "待现场核验"} ·{" "}
+                    {new Date(r.updatedAt).toLocaleDateString("zh-CN")}
+                  </small>
+                </button>
+                <button
+                  aria-label={`删除保存路线 ${r.from} 到 ${r.to}`}
+                  onClick={() => setPendingDelete({ kind: "route", id: r.id })}
+                >
+                  <Trash2 size={17} />
+                </button>
+              </article>
+            ))}
+            {!savedRoutes.length && (
+              <p>还没有现场路线。在路线页点「标注路线」开始。</p>
+            )}
+          </div>
+          <div className="settings-actions">
             <button
-              className="setting-link"
-              onClick={() =>
-                void speak(
-                  "欢迎使用 Atlas Go 校园导航。向前出发，找到你的下一间教室。",
-                ).catch((error) => notice(error.message))
-              }
+              className="button secondary"
+              disabled={!savedRoutes.length}
+              onClick={() => {
+                void exportData(savedRoutes)
+                  .then((saved) => {
+                    if (saved) notice("路线文件已导出");
+                  })
+                  .catch(() => notice("路线文件导出失败，请重试"));
+              }}
             >
-              <Headphones size={19} />
-              试听中文语音
-              <ChevronRight size={16} />
+              <Download size={16} />
+              导出路线
             </button>
-            <p className="tiny-note">
-              安卓使用系统文字转语音引擎；缺少中文语音包时请先在系统中安装。
+            <label className="button secondary">
+              <Upload size={16} />
+              导入路线
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={(e) => void importRoutes(e.target.files?.[0])}
+              />
+            </label>
+          </div>
+          <p className="tiny-note">
+            导入路线默认待核验。地图已随 App
+            离线打包；导入的全景视频需要每次重新选择，方向标注保存在本机。
+          </p>
+          <button
+            className="setting-link"
+            onClick={() => {
+              setSettings(false);
+              setHelp(true);
+            }}
+          >
+            <CircleHelp size={19} /> 使用指南与数据说明{" "}
+            <ChevronRight size={16} />
+          </button>
+          <div className="about-app">
+            <strong>
+              ATLAS GO <span>{APP_VERSION} · Android Preview</span>
+            </strong>
+            <p>
+              当前使用校园 FF-01 空间轮廓。尚未连接 GPS
+              与楼层坐标配准、室内定位服务和全校实拍全景素材。
             </p>
-            <div className="settings-heading">
-              现场路线 <span>{savedRoutes.length} 条</span>
-            </div>
-            <div className="saved-routes">
-              {savedRoutes.map((r) => (
-                <article key={r.id}>
-                  <div>
-                    <strong>
-                      {r.from} → {r.to}
-                    </strong>
-                    <small>
-                      {r.verified ? "本机已标注核验" : "待现场核验"} ·{" "}
-                      {new Date(r.updatedAt).toLocaleDateString("zh-CN")}
-                    </small>
-                  </div>
-                  <button
-                    aria-label="删除保存路线"
-                    onClick={() =>
-                      saveRoutes(savedRoutes.filter((item) => item.id !== r.id))
-                    }
-                  >
-                    <Trash2 size={17} />
-                  </button>
-                </article>
-              ))}
-              {!savedRoutes.length && (
-                <p>还没有现场路线。在路线页点「标注路线」开始。</p>
-              )}
-            </div>
-            <div className="settings-actions">
-              <button
-                className="button secondary"
-                disabled={!savedRoutes.length}
-                onClick={() => {
-                  void exportData(savedRoutes)
-                    .then((saved) => {
-                      if (saved) notice("路线文件已导出");
-                    })
-                    .catch(() => notice("路线文件导出失败，请重试"));
-                }}
-              >
-                <Download size={16} />
-                导出路线
-              </button>
-              <label className="button secondary">
-                <Upload size={16} />
-                导入路线
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={(e) => void importRoutes(e.target.files?.[0])}
-                />
-              </label>
-            </div>
-            <p className="tiny-note">
-              导入路线默认待核验。地图已随 App
-              离线打包；导入的全景视频需要每次重新选择，方向标注保存在本机。
-            </p>
-            <div className="about-app">
-              <strong>
-                ATLAS GO <span>0.1.0 · Android Preview</span>
-              </strong>
-              <p>
-                当前使用校园 FF-01 空间轮廓。尚未连接 GPS
-                与楼层坐标配准、室内定位服务和全校实拍全景素材。
-              </p>
-            </div>
-          </section>
-        </div>
+          </div>
+        </Dialog>
+      )}
+      {overview && (
+        <RouteOverview
+          steps={steps}
+          from={from}
+          to={to ?? ""}
+          current={step}
+          navigating={navigating}
+          onClose={() => setOverview(false)}
+        />
+      )}
+      {help && <HelpDialog onClose={() => setHelp(false)} />}
+      {arrival && (
+        <ArrivalDialog
+          journey={arrival}
+          onClose={() => setArrival(null)}
+          onAgain={() => {
+            setArrival(null);
+            setTab("route");
+          }}
+          onExplore={() => {
+            setArrival(null);
+            setTo(null);
+            setTab("map");
+          }}
+        />
+      )}
+      {pendingDelete && (
+        <Dialog
+          title={
+            pendingDelete.kind === "route" ? "删除这条路线？" : "清空引导记录？"
+          }
+          label="YOUR DATA, YOUR CONTROL"
+          onClose={() => setPendingDelete(null)}
+          className="confirm-dialog"
+        >
+          <p className="dialog-description">
+            {pendingDelete.kind === "route"
+              ? "删除后无法从本机恢复，建议先导出路线文件备份。"
+              : "仅清空此设备的引导记录，收藏和现场路线会保留。"}
+          </p>
+          <div className="confirm-actions">
+            <button
+              className="button secondary"
+              onClick={() => setPendingDelete(null)}
+            >
+              保留资料
+            </button>
+            <button
+              className="button danger"
+              onClick={() => {
+                if (pendingDelete.kind === "route") {
+                  if (
+                    !saveRoutes(
+                      savedRoutes.filter((r) => r.id !== pendingDelete.id),
+                    )
+                  )
+                    return;
+                } else {
+                  try {
+                    clearJourneys();
+                    setJourneys([]);
+                  } catch {
+                    notice("无法清空记录，请重试");
+                    return;
+                  }
+                }
+                setPendingDelete(null);
+                notice("资料已删除");
+              }}
+            >
+              确认删除
+            </button>
+          </div>
+        </Dialog>
       )}
       {toast && (
         <div role="status" className="toast">
